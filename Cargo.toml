@@ -1,0 +1,6 @@
+[package]
+name = "lumberjack"
+version = "0.1.0"
+authors = ["asteroidb612 <dlazzeri1@gmail.com>"]
+
+[dependencies]

@@ -13,7 +13,10 @@ proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 
 ";
+extern crate job_scheduler;
+use job_scheduler::{JobScheduler, Job};
 
+use std::time::Duration;
 use std::error::Error;
 use std::io::prelude::*;
 use std::fs::File;
@@ -31,6 +34,11 @@ fn main() {
         Ok(file) => file,
     };
 
+
+    let mut sched = JobScheduler::new();
+
+    sched.add(Job::new("1/10 * * * * *".parse().unwrap(), || {
+
     // Write the `LOREM_IPSUM` string to `file`, returns `io::Result<()>`
     match file.write_all(LOREM_IPSUM.as_bytes()) {
         Err(why) => {
@@ -38,5 +46,13 @@ fn main() {
                                                why.description())
         },
         Ok(_) => println!("successfully wrote to {}", display),
+    }
+
+    }));
+
+    loop {
+        sched.tick();
+
+        std::thread::sleep(Duration::from_millis(500));
     }
 }
