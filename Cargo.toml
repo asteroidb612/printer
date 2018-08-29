@@ -5,3 +5,8 @@ authors = ["asteroidb612 <dlazzeri1@gmail.com>"]
 
 [dependencies]
 job_scheduler = "*"
+hyper = "0.10.3"
+hyper-rustls = "0.6.1"
+yup-oauth2 = "*"
+google-calendar3 = "1.0.7+20171205"
+chrono = "0.4.4"
