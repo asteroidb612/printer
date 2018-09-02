@@ -133,7 +133,7 @@ fn string_from_items(items: Vec<Event>) -> std::string::String {
     let sorted_events = simplified_events.sorted_by_key(|t| t.0);
 
     for (key, group) in &sorted_events.into_iter().group_by(|t| t.0){ 
-        //It seems x.group_by().length == x.length, how do I group??
+        //TODO GroupBy date, not by datetime
         return_string.push_str(&format!("{:?}:", key.weekday()));
         for event in group.into_iter() {
             return_string.push_str(&event.1);
