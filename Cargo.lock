@@ -281,6 +281,7 @@ dependencies = [
  "google-calendar3 1.0.7+20171205 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.10.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-rustls 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "job_scheduler 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "yup-oauth2 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
