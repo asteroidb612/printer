@@ -2,24 +2,24 @@ extern crate chrono;
 extern crate google_calendar3 as calendar3;
 extern crate hyper;
 extern crate hyper_rustls;
+extern crate itertools;
 extern crate job_scheduler;
 extern crate yup_oauth2 as oauth2;
-extern crate itertools;
 
-use job_scheduler::{Job, JobScheduler};
+//use job_scheduler::{Job, JobScheduler};
 
+use itertools::Itertools;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::time::Duration;
-use itertools::Itertools;
 
 use calendar3::{CalendarHub, Error, Event};
-use chrono::prelude::{Local};
-use chrono::Duration as OlderDuration; //recommended nameing in docs, i think
-use chrono::{DateTime, NaiveDate, NaiveTime, NaiveDateTime};
-use chrono::Datelike;
 use chrono::offset::*;
+use chrono::prelude::Local;
+use chrono::Datelike;
+use chrono::Duration as OlderDuration; //recommended nameing in docs, i think
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
     MemoryStorage,
@@ -59,51 +59,51 @@ fn main() {
         Ok(file) => file,
     };
 
-    let mut sched = JobScheduler::new();
+//    let mut sched = JobScheduler::new();
 
-//    sched.add(Job::new("0 * * * * *".parse().unwrap(), || {
-        let now = Local::now();
-        let next_week = now
-            .clone()
-            .checked_add_signed(OlderDuration::weeks(1))
-            .expect("Time Overflow");
+    //    sched.add(Job::new("0 * * * * *".parse().unwrap(), || {
+    let now = Local::now();
+    let next_week = now
+        .clone()
+        .checked_add_signed(OlderDuration::weeks(1))
+        .expect("Time Overflow");
 
-        // You can configure optional parameters by calling the respective setters at will, and
-        // execute the final call using `doit()`.
-        let result = hub
-            .events()
-            .list(&"dlazzeri1@gmail.com")
-            .time_min(&now.to_rfc3339())
-            .time_max(&next_week.to_rfc3339())
-            .doit();
+    // You can configure optional parameters by calling the respective setters at will, and
+    // execute the final call using `doit()`.
+    let result = hub
+        .events()
+        .list(&"dlazzeri1@gmail.com")
+        .time_min(&now.to_rfc3339())
+        .time_max(&next_week.to_rfc3339())
+        .doit();
 
-        match result {
-            Err(e) => match e {
-                // The Error enum provides details about what exactly happened.
-                // You can also just use its `Debug`, `Display` or `Error` traits
-                Error::HttpError(_)
-                    | Error::MissingAPIKey
-                    | Error::MissingToken(_)
-                    | Error::Cancelled
-                    | Error::UploadSizeLimitExceeded(_, _)
-                    | Error::Failure(_)
-                    | Error::BadRequest(_)
-                    | Error::FieldClash(_)
-                    | Error::JsonDecodeError(_, _) => println!("{}", e),
-            },
-            Ok((_res, events)) => {
-                println!("{:?}", events);
-                let string = string_from_items(events.items.expect("No items to parse"));
-                match file.write_all(&string.as_bytes()) {
-                    Err(why) => panic!("couldn't write to printer: {}", why),
-                    Ok(_) => println!("successfully wrote to {}", display),
-                }
+    match result {
+        Err(e) => match e {
+            // The Error enum provides details about what exactly happened.
+            // You can also just use its `Debug`, `Display` or `Error` traits
+            Error::HttpError(_)
+            | Error::MissingAPIKey
+            | Error::MissingToken(_)
+            | Error::Cancelled
+            | Error::UploadSizeLimitExceeded(_, _)
+            | Error::Failure(_)
+            | Error::BadRequest(_)
+            | Error::FieldClash(_)
+            | Error::JsonDecodeError(_, _) => println!("{}", e),
+        },
+        Ok((_res, events)) => {
+            let string = string_from_items(events.items.expect("No items to parse"));
+            match file.write_all(&string.as_bytes()) {
+                Err(why) => panic!("couldn't write to printer: {}", why),
+                Ok(_) => println!("successfully wrote to {}", display),
             }
+            println!("{}", &string);
         }
-//    }));
+    }
+    //    }));
 
     loop {
-        sched.tick();
+//        sched.tick();
 
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -111,33 +111,51 @@ fn main() {
 
 fn string_from_items(items: Vec<Event>) -> std::string::String {
     let mut return_string: std::string::String = "".to_string();
-    let simplified_events= items.into_iter().map(|event| {
+    let simplified_events = items.into_iter().map(|event| {
         let start = event.start.expect("No start time for event");
         //TODO I really wanna break out this date logic, but I can't think of what the type interface would be
         let when = match start.date {
-            Some(time) => {let date = NaiveDate::parse_from_str(&time, "%Y-%m-%d").expect("Couldn't parse into Naive Date");
-                           let time = NaiveTime::from_hms(0,0,0);
-                           let date_time = NaiveDateTime::new(date, time);
-                           FixedOffset::west(7 * 3600).from_local_datetime(&date_time).unwrap()
-            },
+            Some(time) => {
+                let date = NaiveDate::parse_from_str(&time, "%Y-%m-%d")
+                    .expect("Couldn't parse into Naive Date");
+                let time = NaiveTime::from_hms(0, 0, 0);
+                let date_time = NaiveDateTime::new(date, time);
+                FixedOffset::west(7 * 3600)
+                    .from_local_datetime(&date_time)
+                    .unwrap()
+            }
             None => match start.date_time {
                 Some(time) => DateTime::parse_from_rfc3339(&time).expect("Couldn't parse dates"),
                 None => panic!("There isn't a date or a date_time on event {:?}", start),
             },
         };
         let summary = event.summary.expect("No summary for event");
-        (when,  summary)
+        (when, summary)
     });
 
     //TODO: Recurring events have dates from when they were started :/
     let sorted_events = simplified_events.sorted_by_key(|t| t.0);
 
-    for (key, group) in &sorted_events.into_iter().group_by(|t| t.0){ 
-        //TODO GroupBy date, not by datetime
-        return_string.push_str(&format!("{:?}:", key.weekday()));
+    for (key, group) in &sorted_events.into_iter().group_by(|t| t.0.date()) {
+        return_string.push_str(&format!("{}:\n", weekday_name(key.weekday())));
         for event in group.into_iter() {
-            return_string.push_str(&event.1);
+            //TODO Print time for each event
+            //TODO get all-day tasks in line with the day^
+            return_string.push_str(&format!("  {}\n",  &event.1));
         }
     }
     return_string
+}
+
+fn weekday_name(w: Weekday) -> std::string::String {
+    let name = match w {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
+    };
+    name.to_owned()
 }
