@@ -19,7 +19,7 @@ use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
 use chrono::Duration as OlderDuration; //recommended nameing in docs, i think
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday, Weekday::*};
 use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
     MemoryStorage,
@@ -133,11 +133,10 @@ fn string_from_items(items: Vec<Event>) -> std::string::String {
         (when, summary)
     });
 
-    //TODO: Recurring events have dates from when they were started :/
     let sorted_events = simplified_events.sorted_by_key(|t| t.0);
 
-    for (key, group) in &sorted_events.into_iter().group_by(|t| t.0.date()) {
-        return_string.push_str(&format!("{}:\n", weekday_name(key.weekday())));
+    for (key, group) in &sorted_events.into_iter().group_by(|t| t.0.date().weekday()) {
+        return_string.push_str(&format!("{}:\n", weekday_name(key)));
         for event in group.into_iter() {
             //TODO Print time for each event
             //TODO get all-day tasks in line with the day^
@@ -149,13 +148,13 @@ fn string_from_items(items: Vec<Event>) -> std::string::String {
 
 fn weekday_name(w: Weekday) -> std::string::String {
     let name = match w {
-        Weekday::Mon => "Monday",
-        Weekday::Tue => "Tuesday",
-        Weekday::Wed => "Wednesday",
-        Weekday::Thu => "Thursday",
-        Weekday::Fri => "Friday",
-        Weekday::Sat => "Saturday",
-        Weekday::Sun => "Sunday",
+        Mon => "Monday",
+        Tue => "Tuesday",
+        Wed => "Wednesday",
+        Thu => "Thursday",
+        Fri => "Friday",
+        Sat => "Saturday",
+        Sun => "Sunday",
     };
     name.to_owned()
 }
