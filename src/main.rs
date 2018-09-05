@@ -6,7 +6,7 @@ extern crate itertools;
 extern crate job_scheduler;
 extern crate yup_oauth2 as oauth2;
 
-//use job_scheduler::{Job, JobScheduler};
+use job_scheduler::{Job, JobScheduler};
 
 use itertools::Itertools;
 use std::fs::File;
@@ -59,51 +59,55 @@ fn main() {
         Ok(file) => file,
     };
 
-//    let mut sched = JobScheduler::new();
+    let mut sched = JobScheduler::new();
 
-    //    sched.add(Job::new("0 * * * * *".parse().unwrap(), || {
-    let now = Local::now();
-    let next_week = now
-        .clone()
-        .checked_add_signed(OlderDuration::weeks(1))
-        .expect("Time Overflow");
+    let mut print_next_five_days = || {
+        let now = Local::now();
+        let next_week = now
+            .clone()
+            .checked_add_signed(OlderDuration::weeks(1))
+            .expect("Time Overflow");
 
-    // You can configure optional parameters by calling the respective setters at will, and
-    // execute the final call using `doit()`.
-    let result = hub
-        .events()
-        .list(&"dlazzeri1@gmail.com")
-        .time_min(&now.to_rfc3339())
-        .time_max(&next_week.to_rfc3339())
-        .doit();
+        // You can configure optional parameters by calling the respective setters at will, and
+        // execute the final call using `doit()`.
+        let result = hub
+            .events()
+            .list(&"dlazzeri1@gmail.com")
+            .time_min(&now.to_rfc3339())
+            .time_max(&next_week.to_rfc3339())
+            .doit();
 
-    match result {
-        Err(e) => match e {
-            // The Error enum provides details about what exactly happened.
-            // You can also just use its `Debug`, `Display` or `Error` traits
-            Error::HttpError(_)
-            | Error::MissingAPIKey
-            | Error::MissingToken(_)
-            | Error::Cancelled
-            | Error::UploadSizeLimitExceeded(_, _)
-            | Error::Failure(_)
-            | Error::BadRequest(_)
-            | Error::FieldClash(_)
-            | Error::JsonDecodeError(_, _) => println!("{}", e),
-        },
-        Ok((_res, events)) => {
-            let string = string_from_items(events.items.expect("No items to parse"));
-            match file.write_all(&string.as_bytes()) {
-                Err(why) => panic!("couldn't write to printer: {}", why),
-                Ok(_) => println!("successfully wrote to {}", display),
+        match result {
+            Err(e) => match e {
+                // The Error enum provides details about what exactly happened.
+                // You can also just use its `Debug`, `Display` or `Error` traits
+                Error::HttpError(_)
+                | Error::MissingAPIKey
+                | Error::MissingToken(_)
+                | Error::Cancelled
+                | Error::UploadSizeLimitExceeded(_, _)
+                | Error::Failure(_)
+                | Error::BadRequest(_)
+                | Error::FieldClash(_)
+                | Error::JsonDecodeError(_, _) => println!("{}", e),
+            },
+            Ok((_res, events)) => {
+                let string = string_from_items(events.items.expect("No items to parse"));
+                match file.write_all(&string.as_bytes()) {
+                    Err(why) => panic!("couldn't write to printer: {}", why),
+                    Ok(_) => println!("successfully wrote to {}", display),
+                }
+                println!("{}", &string);
             }
-            println!("{}", &string);
         }
-    }
-    //    }));
-
+    };
+    print_next_five_days();
+    sched.add(Job::new(
+        "0 01,30 * * * *".parse().unwrap(),
+        print_next_five_days,
+    ));
     loop {
-//        sched.tick();
+        sched.tick();
 
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -140,7 +144,7 @@ fn string_from_items(items: Vec<Event>) -> std::string::String {
         for event in group.into_iter() {
             //TODO Print time for each event
             //TODO get all-day tasks in line with the day^
-            return_string.push_str(&format!("  {}\n",  &event.1));
+            return_string.push_str(&format!("  {}\n", &event.1));
         }
     }
     return_string
