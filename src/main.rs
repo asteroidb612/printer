@@ -14,7 +14,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::time::Duration;
 
-use calendar3::{CalendarHub, Error, Event};
+use calendar3::{CalendarHub, Error::*, Event};
 use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
@@ -25,6 +25,11 @@ use oauth2::{
     MemoryStorage,
 };
 use std::default::Default;
+
+#[cfg(target_os = "macos")]
+static DEFAULT_PATH: &str = "./output";
+#[cfg(target_os = "linux")]
+static DEFAULT_PATH: &str = "/dev/serial0";
 
 fn main() {
     let secret: ApplicationSecret =
@@ -50,7 +55,7 @@ fn main() {
         auth,
     );
 
-    let path = Path::new("./output");
+    let path = Path::new(DEFAULT_PATH);
     let display = path.display();
 
     // Open a file in write-only mode, returns `io::Result<File>`
@@ -81,15 +86,15 @@ fn main() {
             Err(e) => match e {
                 // The Error enum provides details about what exactly happened.
                 // You can also just use its `Debug`, `Display` or `Error` traits
-                Error::HttpError(_)
-                | Error::MissingAPIKey
-                | Error::MissingToken(_)
-                | Error::Cancelled
-                | Error::UploadSizeLimitExceeded(_, _)
-                | Error::Failure(_)
-                | Error::BadRequest(_)
-                | Error::FieldClash(_)
-                | Error::JsonDecodeError(_, _) => println!("{}", e),
+                HttpError(_)
+                | MissingAPIKey
+                | MissingToken(_)
+                | Cancelled
+                | UploadSizeLimitExceeded(_, _)
+                | Failure(_)
+                | BadRequest(_)
+                | FieldClash(_)
+                | JsonDecodeError(_, _) => println!("{}", e),
             },
             Ok((_res, events)) => {
                 let string = string_from_items(events.items.expect("No items to parse"));
@@ -103,7 +108,7 @@ fn main() {
     };
     print_next_five_days();
     sched.add(Job::new(
-        "0 01,30 * * * *".parse().unwrap(),
+        "0 0 8 * * * *".parse().unwrap(),
         print_next_five_days,
     ));
     loop {
