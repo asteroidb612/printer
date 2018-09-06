@@ -108,7 +108,7 @@ fn main() {
     };
     print_next_five_days();
     sched.add(Job::new(
-        "0 0 8 * * * *".parse().unwrap(),
+        "0 30 * * * * *".parse().unwrap(),
         print_next_five_days,
     ));
     loop {
