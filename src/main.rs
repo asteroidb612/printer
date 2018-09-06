@@ -68,6 +68,7 @@ fn main() {
 
     let mut print_next_five_days = || {
         let now = Local::now();
+        print!("{:?}", now);
         let next_week = now
             .clone()
             .checked_add_signed(OlderDuration::weeks(1))
