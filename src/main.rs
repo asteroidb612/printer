@@ -27,6 +27,7 @@ use oauth2::{
 };
 use std::default::Default;
 use rouille::Response;
+use std::sync::{Mutex, Arc};
 
 #[cfg(target_os = "macos")]
 static DEFAULT_PATH: &str = "./output";
@@ -109,24 +110,30 @@ fn main() {
             }
         }
     };
+    let days = Arc::new(Mutex::new(Vec::new()));
+    let days2 = days.clone();
+
 
     std::thread::spawn(|| {
-        rouille::start_server("0.0.0.0:80", move |request| {
-            print!("{:?}", request);
+        rouille::start_server("0.0.0.0:80", move |_request| {
+            let time = Local::now();
+            days.lock().unwrap().push(time);
             Response::text("hello world")
         });       
     });
 
-        print_next_five_days();
-    sched.add(Job::new(
-        "0 30 * * * * *".parse().unwrap(),
-        print_next_five_days,
-    ));
+///        print_next_five_days();
+///    sched.add(Job::new(
+///        "0 30 * * * * *".parse().unwrap(),
+///        print_next_five_days,
+///    ));
     
     loop {
-        sched.tick();
+//        sched.tick();
 
         std::thread::sleep(Duration::from_millis(500));
+        let x = &*days2.lock().unwrap();
+        print!("{:?}", x.len());
     }
 }
 
