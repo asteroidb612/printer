@@ -5,6 +5,7 @@ extern crate hyper_rustls;
 extern crate itertools;
 extern crate job_scheduler;
 extern crate yup_oauth2 as oauth2;
+extern crate rouille;
 
 use job_scheduler::{Job, JobScheduler};
 
@@ -25,6 +26,7 @@ use oauth2::{
     MemoryStorage,
 };
 use std::default::Default;
+use rouille::Response;
 
 #[cfg(target_os = "macos")]
 static DEFAULT_PATH: &str = "./output";
@@ -88,14 +90,14 @@ fn main() {
                 // The Error enum provides details about what exactly happened.
                 // You can also just use its `Debug`, `Display` or `Error` traits
                 HttpError(_)
-                | MissingAPIKey
-                | MissingToken(_)
-                | Cancelled
-                | UploadSizeLimitExceeded(_, _)
-                | Failure(_)
-                | BadRequest(_)
-                | FieldClash(_)
-                | JsonDecodeError(_, _) => println!("{}", e),
+                    | MissingAPIKey
+                    | MissingToken(_)
+                    | Cancelled
+                    | UploadSizeLimitExceeded(_, _)
+                    | Failure(_)
+                    | BadRequest(_)
+                    | FieldClash(_)
+                    | JsonDecodeError(_, _) => println!("{}", e),
             },
             Ok((_res, events)) => {
                 let string = string_from_items(events.items.expect("No items to parse"));
@@ -107,11 +109,20 @@ fn main() {
             }
         }
     };
-    print_next_five_days();
+
+    std::thread::spawn(|| {
+        rouille::start_server("0.0.0.0:80", move |request| {
+            print!("{:?}", request);
+            Response::text("hello world")
+        });       
+    });
+
+        print_next_five_days();
     sched.add(Job::new(
         "0 30 * * * * *".parse().unwrap(),
         print_next_five_days,
     ));
+    
     loop {
         sched.tick();
 
