@@ -20,7 +20,7 @@ use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
 use chrono::Duration as OlderDuration; //recommended nameing in docs, i think
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday, Weekday::*};
+use chrono::{Date, DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday, Weekday::*};
 use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
     MemoryStorage,
@@ -132,8 +132,8 @@ fn main() {
 //        sched.tick();
 
         std::thread::sleep(Duration::from_millis(500));
-        let x = &*days2.lock().unwrap();
-        print!("{:?}", x.len());
+        let checkins = days2.lock().unwrap().to_vec(); //Docs didn't mention to_vec()? why so many layers?
+        print!("Checked in on {} consecutive days!", consecutive_days(checkins)); 
     }
 }
 
@@ -185,4 +185,22 @@ fn weekday_name(w: Weekday) -> std::string::String {
         Sun => "Sunday",
     };
     name.to_owned()
+}
+
+fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
+    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+    let mut max = 0;
+    let dates2 = dates.clone(); //Eww
+    for date in dates.into_iter() {
+        let mut d = date.pred();
+        let mut tmp = 1;
+        while (dates2.contains(&d)){
+            d = d.pred();
+            tmp = tmp + 1;
+        }
+        if max < tmp {
+            max = tmp;
+        }
+    }
+    max
 }
