@@ -4,8 +4,8 @@ extern crate hyper;
 extern crate hyper_rustls;
 extern crate itertools;
 extern crate job_scheduler;
-extern crate yup_oauth2 as oauth2;
 extern crate rouille;
+extern crate yup_oauth2 as oauth2;
 
 use job_scheduler::{Job, JobScheduler};
 
@@ -25,9 +25,9 @@ use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
     MemoryStorage,
 };
-use std::default::Default;
 use rouille::Response;
-use std::sync::{Mutex, Arc};
+use std::default::Default;
+use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "macos")]
 static DEFAULT_PATH: &str = "./output";
@@ -51,12 +51,14 @@ fn main() {
         <MemoryStorage as Default>::default(),
         None,
     );
-    let hub = CalendarHub::new(
+    let hub = Arc::new(Mutex::new(CalendarHub::new(
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
         )),
         auth,
+        ))
     );
+    let hub2=hub.clone();//Appease borrow checking gods
 
     let path = Path::new(DEFAULT_PATH);
     let display = path.display();
@@ -68,8 +70,10 @@ fn main() {
     };
 
     let mut sched = JobScheduler::new();
+    let days = Arc::new(Mutex::new(Vec::new())); //I guess haveing two of these means moving's fine
+    let days2 = days.clone();
 
-    let mut print_next_five_days = || {
+    let ping_server = || {
         let now = Local::now();
         print!("{:?}", now);
         let next_week = now
@@ -79,7 +83,25 @@ fn main() {
 
         // You can configure optional parameters by calling the respective setters at will, and
         // execute the final call using `doit()`.
-        let result = hub
+        let _result = hub.lock().unwrap()
+            .events()
+            .list(&"dlazzeri1@gmail.com")
+            .time_min(&now.to_rfc3339())
+            .time_max(&next_week.to_rfc3339())
+            .doit();
+    };
+
+    let print_next_five_days = move || {
+        let now = Local::now();
+        print!("{:?}", now);
+        let next_week = now
+            .clone()
+            .checked_add_signed(OlderDuration::weeks(1))
+            .expect("Time Overflow");
+
+        // You can configure optional parameters by calling the respective setters at will, and
+        // execute the final call using `doit()`.
+        let result = hub2.lock().unwrap()
             .events()
             .list(&"dlazzeri1@gmail.com")
             .time_min(&now.to_rfc3339())
@@ -91,16 +113,26 @@ fn main() {
                 // The Error enum provides details about what exactly happened.
                 // You can also just use its `Debug`, `Display` or `Error` traits
                 HttpError(_)
-                    | MissingAPIKey
-                    | MissingToken(_)
-                    | Cancelled
-                    | UploadSizeLimitExceeded(_, _)
-                    | Failure(_)
-                    | BadRequest(_)
-                    | FieldClash(_)
-                    | JsonDecodeError(_, _) => println!("{}", e),
+                | MissingAPIKey
+                | MissingToken(_)
+                | Cancelled
+                | UploadSizeLimitExceeded(_, _)
+                | Failure(_)
+                | BadRequest(_)
+                | FieldClash(_)
+                | JsonDecodeError(_, _) => println!("{}", e),
             },
             Ok((_res, events)) => {
+                let u = days2.lock().unwrap();
+                let t = u.to_vec();
+                let consec = consecutive_days(t);
+                //TODO Docs didn't mention to_vec()? why so many layers?
+                let s = format!("{} Days in a row", consec);
+                match file.write_all(&s.as_bytes()) {
+                    Err(why) => panic!("couldn't write to printer: {}", why),
+                    Ok(_) => println!("successfully wrote to {}", display),
+                }
+
                 let string = string_from_items(events.items.expect("No items to parse"));
                 match file.write_all(&string.as_bytes()) {
                     Err(why) => panic!("couldn't write to printer: {}", why),
@@ -110,30 +142,28 @@ fn main() {
             }
         }
     };
-    let days = Arc::new(Mutex::new(Vec::new()));
-    let days2 = days.clone();
-
 
     std::thread::spawn(|| {
         rouille::start_server("0.0.0.0:80", move |_request| {
             let time = Local::now();
             days.lock().unwrap().push(time);
             Response::text("hello world")
-        });       
+        });
     });
 
-///        print_next_five_days();
-///    sched.add(Job::new(
-///        "0 30 * * * * *".parse().unwrap(),
-///        print_next_five_days,
-///    ));
-    
+    ping_server();
+    sched.add(Job::new(
+        "0 30 * * * * *".parse().unwrap(),
+        ping_server,
+    ));
+    sched.add(Job::new(
+        "0 0 8 * * * *".parse().unwrap(),
+        print_next_five_days,
+    ));
     loop {
-//        sched.tick();
+        //        sched.tick();
 
         std::thread::sleep(Duration::from_millis(500));
-        let checkins = days2.lock().unwrap().to_vec(); //Docs didn't mention to_vec()? why so many layers?
-        print!("Checked in on {} consecutive days!", consecutive_days(checkins)); 
     }
 }
 
@@ -194,7 +224,7 @@ fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
     for date in dates.into_iter() {
         let mut d = date.pred();
         let mut tmp = 1;
-        while (dates2.contains(&d)){
+        while dates2.contains(&d) {
             d = d.pred();
             tmp = tmp + 1;
         }
