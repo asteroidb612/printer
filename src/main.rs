@@ -125,9 +125,9 @@ fn main() {
             Ok((_res, events)) => {
                 let u = days2.lock().unwrap();
                 let t = u.to_vec();
-                let consec = consecutive_days(t);
+                let consec = github_graph(t);
                 //TODO Docs didn't mention to_vec()? why so many layers?
-                let s = format!("{} Days in a row", consec);
+                let s = format!("\nHabits\n{}\n", consec);
                 match file.write_all(&s.as_bytes()) {
                     Err(why) => panic!("couldn't write to printer: {}", why),
                     Ok(_) => println!("successfully wrote to {}", display),
@@ -138,7 +138,7 @@ fn main() {
                     Err(why) => panic!("couldn't write to printer: {}", why),
                     Ok(_) => println!("successfully wrote to {}", display),
                 }
-                println!("{}", &string);
+                println!("\n\n\n{}\n\n\n", string);
             }
         }
     };
@@ -157,7 +157,7 @@ fn main() {
         ping_server,
     ));
     sched.add(Job::new(
-        "0 0 8 * * * *".parse().unwrap(),
+        "0 * * * * * *".parse().unwrap(),
         print_next_five_days,
     ));
     loop {
@@ -233,4 +233,28 @@ fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
         }
     }
     max
+}
+
+fn github_graph(v : Vec<DateTime<Local>>) -> String {
+    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+    let today = Local::now().date();
+    let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here?
+    let mut date = min.clone();
+    while date.weekday() != Sun {
+        date = date.pred()
+    }
+    let mut output = String::from("");
+    while date <= today {
+        if date.weekday() == Sun {
+            output.push_str("\n")
+        }
+        if dates.contains(&date) {
+            output.push_str("X");
+        }
+        else {
+            output.push_str("_");
+        }
+        date = date.succ()
+    };
+    format!("\n{}\n", output)
 }
