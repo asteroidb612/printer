@@ -157,11 +157,11 @@ fn main() {
         ping_server,
     ));
     sched.add(Job::new(
-        "0 * * * * * *".parse().unwrap(),
+        "0 0 8 * * * *".parse().unwrap(),
         print_next_five_days,
     ));
     loop {
-        //        sched.tick();
+        sched.tick();
 
         std::thread::sleep(Duration::from_millis(500));
     }
