@@ -7,6 +7,9 @@ extern crate job_scheduler;
 extern crate rouille;
 extern crate yup_oauth2 as oauth2;
 
+extern crate serde;
+extern crate serde_json;
+
 use job_scheduler::{Job, JobScheduler};
 
 use itertools::Itertools;
@@ -56,9 +59,8 @@ fn main() {
             hyper_rustls::TlsClient::new(),
         )),
         auth,
-        ))
-    );
-    let hub2=hub.clone();//Appease borrow checking gods
+    )));
+    let hub2 = hub.clone(); //Appease borrow checking gods
 
     let path = Path::new(DEFAULT_PATH);
     let display = path.display();
@@ -75,7 +77,6 @@ fn main() {
 
     let ping_server = || {
         let now = Local::now();
-        print!("{:?}", now);
         let next_week = now
             .clone()
             .checked_add_signed(OlderDuration::weeks(1))
@@ -83,7 +84,9 @@ fn main() {
 
         // You can configure optional parameters by calling the respective setters at will, and
         // execute the final call using `doit()`.
-        let _result = hub.lock().unwrap()
+        let _result = hub
+            .lock()
+            .unwrap()
             .events()
             .list(&"dlazzeri1@gmail.com")
             .time_min(&now.to_rfc3339())
@@ -93,7 +96,6 @@ fn main() {
 
     let print_next_five_days = move || {
         let now = Local::now();
-        print!("{:?}", now);
         let next_week = now
             .clone()
             .checked_add_signed(OlderDuration::weeks(1))
@@ -101,7 +103,9 @@ fn main() {
 
         // You can configure optional parameters by calling the respective setters at will, and
         // execute the final call using `doit()`.
-        let result = hub2.lock().unwrap()
+        let result = hub2
+            .lock()
+            .unwrap()
             .events()
             .list(&"dlazzeri1@gmail.com")
             .time_min(&now.to_rfc3339())
@@ -145,17 +149,14 @@ fn main() {
 
     std::thread::spawn(|| {
         rouille::start_server("0.0.0.0:80", move |_request| {
-            let time = Local::now();
-            days.lock().unwrap().push(time);
-            Response::text("hello world")
+            let mut store = days.into_inner().expect("Corrupted store");
+            store.push(Local::now());
+            Response::text(serde_json::to_string(&store).unwrap())
         });
     });
 
     ping_server();
-    sched.add(Job::new(
-        "0 30 * * * * *".parse().unwrap(),
-        ping_server,
-    ));
+    sched.add(Job::new("0 30 * * * * *".parse().unwrap(), ping_server));
     sched.add(Job::new(
         "0 0 15 * * * *".parse().unwrap(),
         print_next_five_days,
@@ -235,7 +236,7 @@ fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
     max
 }
 
-fn github_graph(v : Vec<DateTime<Local>>) -> String {
+fn github_graph(v: Vec<DateTime<Local>>) -> String {
     let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
     let today = Local::now().date();
     let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here?
@@ -250,11 +251,10 @@ fn github_graph(v : Vec<DateTime<Local>>) -> String {
         }
         if dates.contains(&date) {
             output.push_str("X");
-        }
-        else {
+        } else {
             output.push_str("_");
         }
         date = date.succ()
-    };
+    }
     format!("\n{}\n", output)
 }
