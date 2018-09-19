@@ -63,7 +63,6 @@ fn main() {
     let hub2 = hub.clone(); //Appease borrow checking gods
 
     let path = Path::new(DEFAULT_PATH);
-    let display = path.display();
 
     // Open a file in write-only mode, returns `io::Result<File>`
     let mut file = match File::create(&path) {
@@ -72,8 +71,25 @@ fn main() {
     };
 
     let mut sched = JobScheduler::new();
-    let days = Arc::new(Mutex::new(Vec::new())); //I guess haveing two of these means moving's fine
-    let days2 = days.clone();
+    let path = Path::new("store.json");
+    let display = path.display();
+    let store = match File::open(&path) {
+        Err(_why) => vec![],
+        Ok(mut file) => {
+            let mut s = String::new();
+            match file.read_to_string(&mut s) {
+                Err(_why) => vec![],
+                Ok(_) =>  {
+                    match serde_json::from_str(&mut s) {
+                        Err(_why) => vec![],
+                        Ok(parsed_store) => parsed_store
+                    }
+                }
+            }
+        }
+    };
+    let days = Arc::new(Mutex::new(store)); //I guess haveing two of these means moving's fine
+    let days2 = days.clone(); //What are memory implications of a move?
 
     let ping_server = || {
         let now = Local::now();
@@ -230,23 +246,23 @@ fn weekday_name(w: Weekday) -> std::string::String {
     name.to_owned()
 }
 
-fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
-    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
-    let mut max = 0;
-    let dates2 = dates.clone(); //Eww
-    for date in dates.into_iter() {
-        let mut d = date.pred();
-        let mut tmp = 1;
-        while dates2.contains(&d) {
-            d = d.pred();
-            tmp = tmp + 1;
-        }
-        if max < tmp {
-            max = tmp;
-        }
-    }
-    max
-}
+//fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
+//    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+//    let mut max = 0;
+//    let dates2 = dates.clone(); //Eww
+//    for date in dates.into_iter() {
+//        let mut d = date.pred();
+//        let mut tmp = 1;
+//        while dates2.contains(&d) {
+//            d = d.pred();
+//            tmp = tmp + 1;
+//        }
+//        if max < tmp {
+//            max = tmp;
+//        }
+//    }
+//    max
+//}
 
 fn github_graph(v: Vec<DateTime<Local>>) -> String {
     let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
