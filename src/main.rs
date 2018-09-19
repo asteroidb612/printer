@@ -157,7 +157,7 @@ fn main() {
         ping_server,
     ));
     sched.add(Job::new(
-        "0 0 8 * * * *".parse().unwrap(),
+        "0 0 15 * * * *".parse().unwrap(),
         print_next_five_days,
     ));
     loop {
