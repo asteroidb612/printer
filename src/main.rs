@@ -149,9 +149,21 @@ fn main() {
 
     std::thread::spawn(|| {
         rouille::start_server("0.0.0.0:80", move |_request| {
-            let mut store = days.into_inner().expect("Corrupted store");
+            let mut store = days.lock().unwrap();
             store.push(Local::now());
-            Response::text(serde_json::to_string(&store).unwrap())
+            let serialized = serde_json::to_string(&store.clone()).unwrap();
+
+            let path = Path::new("./store.json");
+            let mut file = match File::create(path) {
+                Err(_) => panic!("couldn't create file for server storage"),
+                Ok(file) => file
+            };
+            match file.write_all(serialized.as_bytes()) {
+                Err(_) => panic!("server couldn't write store to file"),
+                Ok(_) => ()
+            };
+
+            Response::text(serialized)
         });
     });
 
