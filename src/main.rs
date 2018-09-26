@@ -7,6 +7,8 @@ extern crate job_scheduler;
 extern crate rouille;
 extern crate yup_oauth2 as oauth2;
 
+#[macro_use]
+extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
@@ -73,7 +75,7 @@ fn main() {
     let mut sched = JobScheduler::new();
     let path = Path::new("store.json");
     let display = path.display();
-    let store = match File::open(&path) {
+    let store: Vec<Log> = match File::open(&path) {
         Err(_why) => vec![],
         Ok(mut file) => {
             let mut s = String::new();
@@ -164,9 +166,10 @@ fn main() {
     };
 
     std::thread::spawn(|| {
-        rouille::start_server("0.0.0.0:80", move |_request| {
+        rouille::start_server("0.0.0.0:80", move |request| {
             let mut store = days.lock().unwrap();
-            store.push(Local::now());
+            let log = Log {what: request.url(), when: Local::now() };
+            store.push(log);
             let serialized = serde_json::to_string(&store.clone()).unwrap();
 
             let path = Path::new("./store.json");
@@ -264,8 +267,8 @@ fn weekday_name(w: Weekday) -> std::string::String {
 //    max
 //}
 
-fn github_graph(v: Vec<DateTime<Local>>) -> String {
-    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+fn github_graph(v: Vec<Log>) -> String {
+    let dates = v.iter().map(|l| DateTime::date(&l.when)).collect::<Vec<Date<Local>>>();
     let today = Local::now().date();
     let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here?
     let mut date = min.clone();
@@ -285,4 +288,10 @@ fn github_graph(v: Vec<DateTime<Local>>) -> String {
         date = date.succ()
     }
     format!("\n{}\n", output)
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Log {
+    when: chrono::DateTime<Local>,
+    what: String
 }
