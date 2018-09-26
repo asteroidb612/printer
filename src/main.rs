@@ -4,13 +4,12 @@ extern crate hyper;
 extern crate hyper_rustls;
 extern crate itertools;
 extern crate job_scheduler;
-extern crate rouille;
 extern crate yup_oauth2 as oauth2;
 
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
+#[macro_use] extern crate rouille;
 
 use job_scheduler::{Job, JobScheduler};
 
@@ -167,22 +166,30 @@ fn main() {
 
     std::thread::spawn(|| {
         rouille::start_server("0.0.0.0:80", move |request| {
-            let mut store = days.lock().unwrap();
-            let log = Log {what: request.url(), when: Local::now() };
-            store.push(log);
-            let serialized = serde_json::to_string(&store.clone()).unwrap();
+            router!(request,
+            (GET) (/) => {
+                let file = File::open("site/index.html").unwrap();
+                Response::from_file("text/html; charset=utf8", file)
+            },
+            _ => {
+                let mut store = days.lock().unwrap();
+                let log = Log {what: request.url(), when: Local::now() };
+                store.push(log);
+                let serialized = serde_json::to_string(&store.clone()).unwrap();
 
-            let path = Path::new("./store.json");
-            let mut file = match File::create(path) {
-                Err(_) => panic!("couldn't create file for server storage"),
-                Ok(file) => file
-            };
-            match file.write_all(serialized.as_bytes()) {
-                Err(_) => panic!("server couldn't write store to file"),
-                Ok(_) => ()
-            };
+                let path = Path::new("./store.json");
+                let mut file = match File::create(path) {
+                    Err(_) => panic!("couldn't create file for server storage"),
+                    Ok(file) => file
+                };
+                match file.write_all(serialized.as_bytes()) {
+                    Err(_) => panic!("server couldn't write store to file"),
+                    Ok(_) => ()
+                };
 
-            Response::text(serialized)
+                Response::text(serialized)                
+            })
+
         });
     });
 
@@ -295,3 +302,10 @@ struct Log {
     when: chrono::DateTime<Local>,
     what: String
 }
+
+//#[derive(Serialize, Deserialize, Clone)]
+//struct _Game { 
+//    what: String,
+//    start: chrono::Date<Local>,
+//    end: chrono::Date<Local>
+//}
