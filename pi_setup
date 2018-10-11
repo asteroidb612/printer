@@ -1,0 +1,11 @@
+#!/bin/bash
+#Say shat you're doing, then send it all to the printer
+exe() { echo "\$ $@" > /dev/serial0 ; "$@" > /dev/serial0 2>&1; }
+
+exe stty -F /dev/serial0 19200
+exe cd /home/pi/lumberjack
+exe pwd
+exe git checkout printer 
+exe git pull 
+exe cargo run &
+exit 0
