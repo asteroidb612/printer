@@ -19,7 +19,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::time::Duration;
 
-use calendar3::{CalendarHub, Error::*, Event};
+use calendar3::{CalendarHub, Error::*};
 use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
@@ -52,7 +52,7 @@ fn main() {
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
         )),
-        <MemoryStorage as Default>::default(),
+        <MemoryStorage as Default>::default(), //TODO Is this not real memory storage? Could I get rid of Ping with this?
         None,
     );
     let hub = Arc::new(Mutex::new(CalendarHub::new(
@@ -63,18 +63,18 @@ fn main() {
     )));
     let hub2 = hub.clone(); //Appease borrow checking gods
 
-    let path = Path::new(DEFAULT_PATH);
-
     // Open a file in write-only mode, returns `io::Result<File>`
-    let mut file = match File::create(&path) {
+    let mut printer = match File::create(Path::new(DEFAULT_PATH)) { //I have a lot of good case studies in here for moving/borrowing... this is one...
         Err(why) => panic!("couldn't create file in write-only mode: {}", why),
         Ok(file) => file,
     };
+    let hello = "Hello World!\n\nIt's working... It's working!";
+    printer.write_all(&hello.as_bytes()).unwrap();
 
-    let mut sched = JobScheduler::new();
+    let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
     let display = path.display();
-    let store: Vec<Log> = match File::open(&path) {
+    let model = Model {games: match File::open(&path) {
         Err(_why) => vec![],
         Ok(mut file) => {
             let mut s = String::new();
@@ -88,9 +88,9 @@ fn main() {
                 }
             }
         }
-    };
-    let days = Arc::new(Mutex::new(store)); //I guess haveing two of these means moving's fine
-    let days2 = days.clone(); //What are memory implications of a move?
+    }};
+    let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
+    let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
 
     let ping_server = || {
         let now = Local::now();
@@ -141,24 +141,28 @@ fn main() {
                 | Failure(_)
                 | BadRequest(_)
                 | FieldClash(_)
-                | JsonDecodeError(_, _) => println!("{}", e),
+                | JsonDecodeError(_, _) => {
+                    println!("{}", e);
+                    let message = "\n\nUnable to connect to Google ";
+                    printer.write_all(&message.as_bytes()).unwrap();
+                },
             },
             Ok((_res, events)) => {
-                let u = days2.lock().unwrap();
-                let t = u.to_vec();
-                let consec = github_graph(t);
+                let u = share_for_cron.lock().unwrap();
+                let t = u.games.to_vec();
+                let consec = github_graph(&t[0]);
                 //TODO Docs didn't mention to_vec()? why so many layers?
                 let s = format!("\nHabits\n{}\n", consec);
-                match file.write_all(&s.as_bytes()) {
+                match printer.write_all(&s.as_bytes()) {
                     Err(why) => panic!("couldn't write to printer: {}", why),
                     Ok(_) => println!("successfully wrote to {}", display),
-                }
+                };
 
                 let string = string_from_items(events.items.expect("No items to parse"));
-                match file.write_all(&string.as_bytes()) {
+                match printer.write_all(&string.as_bytes()) {
                     Err(why) => panic!("couldn't write to printer: {}", why),
                     Ok(_) => println!("successfully wrote to {}", display),
-                }
+                };
                 println!("\n\n\n{}\n\n\n", string);
             }
         }
@@ -172,9 +176,26 @@ fn main() {
                 Response::from_file("text/html; charset=utf8", file)
             },
             _ => {
-                let mut store = days.lock().unwrap();
-                let log = Log {what: request.url(), when: Local::now() };
-                store.push(log);
+                let mut store = share_for_web_interface.lock().unwrap();
+                //I want a mutable borrow, not a move
+                // Can you pass a mutable borrow to functions?
+                // Can you set an immutable borrow?
+                // What IIIS dereferencing?
+                // Is it just taking the shells of of types?
+                // Is each layer maybe borrowed, maybe owned?
+                // How do I write to a layer? mutating the layer above?
+                // &(this) is a place expression. So any place can go there.
+                // &(functionCall) is using a temporary, implicit let expression to store functionCall then make the borrow
+                // *dereference ALWAYS implicitly borrows!
+                // So it never moves
+                // So we could tell it to borrow mut or not
+                // *share.lock().unwrap() -> *&share.lock().unwrap() -> let &x = &share.lock().unwrap(); *&x
+                // Wtf is the place in a place_expression for a borrow? in this article's first example?
+                //* -> & -> let
+                // ONLY SOMETIMES!
+                // f
+                //https://stackoverflow.com/questions/51335679/where-is-a-mutexguard-if-i-never-assign-it-to-a-variable
+                *store = updated(&mut *store, Msg::GameOccurence(request.url(), Local::now()));
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
 
                 let path = Path::new("./store.json");
@@ -189,24 +210,23 @@ fn main() {
 
                 Response::text(serialized)                
             })
-
         });
     });
 
     ping_server();
-    sched.add(Job::new("0 30 * * * * *".parse().unwrap(), ping_server));
-    sched.add(Job::new(
+    cron.add(Job::new("0 30 * * * * *".parse().unwrap(), ping_server));
+    cron.add(Job::new(
         "0 0 15 * * * *".parse().unwrap(),
         print_next_five_days,
     ));
     loop {
-        sched.tick();
+        cron.tick();
 
         std::thread::sleep(Duration::from_millis(500));
     }
 }
 
-fn string_from_items(items: Vec<Event>) -> std::string::String {
+fn string_from_items(items: Vec<calendar3::Event>) -> std::string::String {
     let mut return_string: std::string::String = "".to_string();
     let simplified_events = items.into_iter().map(|event| {
         let start = event.start.expect("No start time for event");
@@ -274,15 +294,15 @@ fn weekday_name(w: Weekday) -> std::string::String {
 //    max
 //}
 
-fn github_graph(v: Vec<Log>) -> String {
-    let dates = v.iter().map(|l| DateTime::date(&l.when)).collect::<Vec<Date<Local>>>();
+fn github_graph(g: &Game) -> String {
+    let dates = &g.events.iter().map(|l| DateTime::date(&l.when)).collect::<Vec<Date<Local>>>();
     let today = Local::now().date();
-    let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here?
+    let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
     let mut date = min.clone();
     while date.weekday() != Sun {
         date = date.pred()
     }
-    let mut output = String::from("");
+    let mut output = String::from(format!("Game {}\n", &g.name));
     while date <= today {
         if date.weekday() == Sun {
             output.push_str("\n")
@@ -297,15 +317,39 @@ fn github_graph(v: Vec<Log>) -> String {
     format!("\n{}\n", output)
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct Log {
-    when: chrono::DateTime<Local>,
-    what: String
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Event {what: String, when: chrono::DateTime<Local>}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Game  {
+    name: String,
+    //start: chrono::DateTime<Local>,
+    //end: chrono::DateTime<Local>,
+    events: Vec<Event>
 }
 
-//#[derive(Serialize, Deserialize, Clone)]
-//struct _Game { 
-//    what: String,
-//    start: chrono::Date<Local>,
-//    end: chrono::Date<Local>
-//}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Model {
+    games: Vec<Game>,
+}
+
+enum Msg {
+    GameOccurence(String, chrono::DateTime<Local>)
+}
+    
+
+fn updated(model: & mut Model, msg: Msg) -> Model {
+    let c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
+    match msg {
+        Msg::GameOccurence(game, time) => Model {games:
+           c.games.into_iter().map(|mut stored_game| {
+               if stored_game.name == game {
+                   stored_game.events.push(Event {what:game.clone(), when:time});
+                   stored_game //Hey that's not immutable... maybe I miss conslists
+               } else {
+                   stored_game
+               }
+           }).collect()
+       }
+   }
+}
