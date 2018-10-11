@@ -64,10 +64,12 @@ fn main() {
     let hub2 = hub.clone(); //Appease borrow checking gods
 
     // Open a file in write-only mode, returns `io::Result<File>`
-    let mut printer = match File::create(Path::new(DEFAULT_PATH)) {
+    let mut printer = match File::create(Path::new(DEFAULT_PATH)) { //I have a lot of good case studies in here for moving/borrowing... this is one...
         Err(why) => panic!("couldn't create file in write-only mode: {}", why),
         Ok(file) => file,
     };
+    let hello = "Hello World!\n\nIt's working... It's working!";
+    printer.write_all(&hello.as_bytes()).unwrap();
 
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
@@ -139,7 +141,11 @@ fn main() {
                 | Failure(_)
                 | BadRequest(_)
                 | FieldClash(_)
-                | JsonDecodeError(_, _) => println!("{}", e),
+                | JsonDecodeError(_, _) => {
+                    println!("{}", e);
+                    let message = "\n\nUnable to connect to Google ";
+                    printer.write_all(&message.as_bytes()).unwrap();
+                },
             },
             Ok((_res, events)) => {
                 let u = share_for_cron.lock().unwrap();
@@ -204,7 +210,6 @@ fn main() {
 
                 Response::text(serialized)                
             })
-
         });
     });
 
