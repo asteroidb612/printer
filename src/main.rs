@@ -155,12 +155,17 @@ fn main() {
             Ok((_res, events)) => {
                 let u = share_for_cron.lock().unwrap();
                 let t = u.games.to_vec();
-                let consec = github_graph(&t[0]);
-                //TODO Docs didn't mention to_vec()? why so many layers?
-                let s = format!("\nHabits\n{}\n", consec);
-                match printer.write_all(&s.as_bytes()) {
-                    Err(why) => panic!("couldn't write to printer: {}", why),
-                    Ok(_) => println!("successfully wrote to {}", display),
+                match t.get(0) {
+                    Some(x) => {
+                        let consec = github_graph(&x);
+                        //TODO Docs didn't mention to_vec()? why so many layers?
+                        let s = format!("\nHabits\n{}\n", consec);
+                        match printer.write_all(&s.as_bytes()) {
+                            Err(why) => panic!("couldn't write to printer: {}", why),
+                            Ok(_) => println!("successfully wrote to {}", display),
+                        };
+                    }
+                    None => println!("No games to log"),
                 };
 
                 let string = string_from_items(events.items.expect("No items to parse"));
@@ -390,6 +395,7 @@ struct Transaction {
     approved: bool,
     flag_color: Option<String>,
 }
+
 
 fn updated(model: &mut Model, msg: Msg) -> Model {
     let c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
