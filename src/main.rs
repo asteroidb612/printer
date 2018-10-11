@@ -6,10 +6,12 @@ extern crate itertools;
 extern crate job_scheduler;
 extern crate yup_oauth2 as oauth2;
 
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
-#[macro_use] extern crate rouille;
+#[macro_use]
+extern crate rouille;
 
 use job_scheduler::{Job, JobScheduler};
 
@@ -64,7 +66,8 @@ fn main() {
     let hub2 = hub.clone(); //Appease borrow checking gods
 
     // Open a file in write-only mode, returns `io::Result<File>`
-    let mut printer = match File::create(Path::new(DEFAULT_PATH)) { //I have a lot of good case studies in here for moving/borrowing... this is one...
+    let mut printer = match File::create(Path::new(DEFAULT_PATH)) {
+        //I have a lot of good case studies in here for moving/borrowing... this is one...
         Err(why) => panic!("couldn't create file in write-only mode: {}", why),
         Ok(file) => file,
     };
@@ -74,21 +77,21 @@ fn main() {
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
     let display = path.display();
-    let model = Model {games: match File::open(&path) {
-        Err(_why) => vec![],
-        Ok(mut file) => {
-            let mut s = String::new();
-            match file.read_to_string(&mut s) {
-                Err(_why) => vec![],
-                Ok(_) =>  {
-                    match serde_json::from_str(&mut s) {
+    let model = Model {
+        games: match File::open(&path) {
+            Err(_why) => vec![],
+            Ok(mut file) => {
+                let mut s = String::new();
+                match file.read_to_string(&mut s) {
+                    Err(_why) => vec![],
+                    Ok(_) => match serde_json::from_str(&mut s) {
                         Err(_why) => vec![],
-                        Ok(parsed_store) => parsed_store
-                    }
+                        Ok(parsed_store) => parsed_store,
+                    },
                 }
             }
-        }
-    }};
+        },
+    };
     let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
     let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
 
@@ -145,17 +148,22 @@ fn main() {
                     println!("{}", e);
                     let message = "\n\nUnable to connect to Google ";
                     printer.write_all(&message.as_bytes()).unwrap();
-                },
+                }
             },
             Ok((_res, events)) => {
                 let u = share_for_cron.lock().unwrap();
                 let t = u.games.to_vec();
-                let consec = github_graph(&t[0]);
-                //TODO Docs didn't mention to_vec()? why so many layers?
-                let s = format!("\nHabits\n{}\n", consec);
-                match printer.write_all(&s.as_bytes()) {
-                    Err(why) => panic!("couldn't write to printer: {}", why),
-                    Ok(_) => println!("successfully wrote to {}", display),
+                match t.get(0) {
+                    Some(x) => {
+                        let consec = github_graph(&x);
+                        //TODO Docs didn't mention to_vec()? why so many layers?
+                        let s = format!("\nHabits\n{}\n", consec);
+                        match printer.write_all(&s.as_bytes()) {
+                            Err(why) => panic!("couldn't write to printer: {}", why),
+                            Ok(_) => println!("successfully wrote to {}", display),
+                        };
+                    }
+                    None => println!("No games to log"),
                 };
 
                 let string = string_from_items(events.items.expect("No items to parse"));
@@ -295,7 +303,11 @@ fn weekday_name(w: Weekday) -> std::string::String {
 //}
 
 fn github_graph(g: &Game) -> String {
-    let dates = &g.events.iter().map(|l| DateTime::date(&l.when)).collect::<Vec<Date<Local>>>();
+    let dates = &g
+        .events
+        .iter()
+        .map(|l| DateTime::date(&l.when))
+        .collect::<Vec<Date<Local>>>();
     let today = Local::now().date();
     let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
     let mut date = min.clone();
@@ -318,14 +330,17 @@ fn github_graph(g: &Game) -> String {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Event {what: String, when: chrono::DateTime<Local>}
+struct Event {
+    what: String,
+    when: chrono::DateTime<Local>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Game  {
+struct Game {
     name: String,
     //start: chrono::DateTime<Local>,
     //end: chrono::DateTime<Local>,
-    events: Vec<Event>
+    events: Vec<Event>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -334,22 +349,28 @@ struct Model {
 }
 
 enum Msg {
-    GameOccurence(String, chrono::DateTime<Local>)
+    GameOccurence(String, chrono::DateTime<Local>),
 }
-    
 
-fn updated(model: & mut Model, msg: Msg) -> Model {
+fn updated(model: &mut Model, msg: Msg) -> Model {
     let c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
     match msg {
-        Msg::GameOccurence(game, time) => Model {games:
-           c.games.into_iter().map(|mut stored_game| {
-               if stored_game.name == game {
-                   stored_game.events.push(Event {what:game.clone(), when:time});
-                   stored_game //Hey that's not immutable... maybe I miss conslists
-               } else {
-                   stored_game
-               }
-           }).collect()
-       }
-   }
+        Msg::GameOccurence(game, time) => Model {
+            games: c
+                .games
+                .into_iter()
+                .map(|mut stored_game| {
+                    if stored_game.name == game {
+                        stored_game.events.push(Event {
+                            what: game.clone(),
+                            when: time,
+                        });
+                        stored_game //Hey that's not immutable... maybe I miss conslists
+                    } else {
+                        stored_game
+                    }
+                })
+                .collect(),
+        },
+    }
 }
