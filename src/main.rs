@@ -22,7 +22,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::time::Duration;
 
-use calendar3::{CalendarHub, Error::*};
+use calendar3::{CalendarHub};
 use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
@@ -123,59 +123,54 @@ fn main() {
             .checked_add_signed(OlderDuration::weeks(1))
             .expect("Time Overflow");
 
+        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io", "fb Calendar"];
+        let mut all_events = vec![];
         // You can configure optional parameters by calling the respective setters at will, and
         // execute the final call using `doit()`.
-        let result = hub2
-            .lock()
-            .unwrap()
-            .events()
-            .list(&"dlazzeri1@gmail.com")
-            .time_min(&now.to_rfc3339())
-            .time_max(&next_week.to_rfc3339())
-            .doit();
+        for calendar in calendars.iter() {
+            let result = hub2
+                .lock()
+                .unwrap()
+                .events()
+                .list(&calendar)
+                .time_min(&now.to_rfc3339())
+                .time_max(&next_week.to_rfc3339())
+                .doit();
 
-        match result {
-            Err(e) => match e {
-                // The Error enum provides details about what exactly happened.
-                // You can also just use its `Debug`, `Display` or `Error` traits
-                HttpError(_)
-                | MissingAPIKey
-                | MissingToken(_)
-                | Cancelled
-                | UploadSizeLimitExceeded(_, _)
-                | Failure(_)
-                | BadRequest(_)
-                | FieldClash(_)
-                | JsonDecodeError(_, _) => {
-                    println!("{}", e);
+            match result {
+                Ok((_res, events)) => {
+                    match events.items {
+                        Some( mut e) => {all_events.append(&mut e);}
+                        None => {println!("No events on calendar {}", calendar);}
+                    };
+                },
+                _ => {
                     let message = "\n\nUnable to connect to Google ";
                     printer.write_all(&message.as_bytes()).unwrap();
                 }
-            },
-            Ok((_res, events)) => {
-                let u = share_for_cron.lock().unwrap();
-                let t = u.games.to_vec();
-                match t.get(0) {
-                    Some(x) => {
-                        let consec = github_graph(&x);
-                        //TODO Docs didn't mention to_vec()? why so many layers?
-                        let s = format!("\nHabits\n{}\n", consec);
-                        match printer.write_all(&s.as_bytes()) {
-                            Err(why) => panic!("couldn't write to printer: {}", why),
-                            Ok(_) => println!("successfully wrote to {}", display),
-                        };
-                    }
-                    None => println!("No games to log"),
-                };
-
-                let string = string_from_items(events.items.expect("No items to parse"));
-                match printer.write_all(&string.as_bytes()) {
+            };
+        }
+        let u = share_for_cron.lock().unwrap();
+        let t = u.games.to_vec();
+        match t.get(0) {
+            Some(x) => {
+                let consec = github_graph(&x);
+                //TODO Docs didn't mention to_vec()? why so many layers?
+                let s = format!("\nHabits\n{}\n", consec);
+                match printer.write_all(&s.as_bytes()) {
                     Err(why) => panic!("couldn't write to printer: {}", why),
                     Ok(_) => println!("successfully wrote to {}", display),
                 };
-                println!("\n\n\n{}\n\n\n", string);
             }
-        }
+            None => println!("No games to log: {:?}", &u),
+        };
+
+        let string = string_from_items(all_events);
+        match printer.write_all(&string.as_bytes()) {
+            Err(why) => panic!("couldn't write to printer: {}", why),
+            Ok(_) => println!("successfully wrote to {}", display),
+        };
+        println!("\n\n\n{}\n\n\n", string);
     };
 
     let check_ynab_api =
@@ -337,7 +332,12 @@ fn github_graph(g: &Game) -> String {
         .map(|l| DateTime::date(&l.when))
         .collect::<Vec<Date<Local>>>();
     let today = Local::now().date();
-    let min = dates.iter().min().expect("No dates so far").clone(); //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
+    let min = match dates.iter().min() {
+        Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
+        None => {
+            return String::from("No Dates For Game So Far");
+        }
+    };
     let mut date = min.clone();
     while date.weekday() != Sun {
         date = date.pred()
@@ -395,7 +395,6 @@ struct Transaction {
     approved: bool,
     flag_color: Option<String>,
 }
-
 
 fn updated(model: &mut Model, msg: Msg) -> Model {
     let c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
