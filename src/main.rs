@@ -6,6 +6,7 @@ extern crate itertools;
 extern crate job_scheduler;
 extern crate reqwest;
 extern crate yup_oauth2 as oauth2;
+extern crate gag;
 
 #[macro_use]
 extern crate serde_derive;
@@ -35,6 +36,7 @@ use oauth2::{
 use rouille::Response;
 use std::default::Default;
 use std::sync::{Arc, Mutex};
+use gag::Redirect;
 
 #[cfg(target_os = "macos")]
 static DEFAULT_PATH: &str = "./output";
@@ -67,17 +69,16 @@ fn main() {
     let hub2 = hub.clone(); //Appease borrow checking gods
 
     // Open a file in write-only mode, returns `io::Result<File>`
-    let mut printer = match File::create(Path::new(DEFAULT_PATH)) {
+    let printer = match File::create(Path::new(DEFAULT_PATH)) {
         //I have a lot of good case studies in here for moving/borrowing... this is one...
         Err(why) => panic!("couldn't create file in write-only mode: {}", why),
         Ok(file) => file,
     };
-    let hello = "Hello World!\n\nIt's working... It's working!";
-    printer.write_all(&hello.as_bytes()).unwrap();
+    Redirect::stdout(printer).unwrap();
+    println!("Hello World!\n\nIt's working... It's working!");
 
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
-    let display = path.display();
     let model = Model {
         games: match File::open(&path) {
             Err(_why) => vec![],
@@ -145,8 +146,7 @@ fn main() {
                     };
                 },
                 _ => {
-                    let message = "\n\nUnable to connect to Google ";
-                    printer.write_all(&message.as_bytes()).unwrap();
+                    println!("\n\nUnable to connect to Google ");
                 }
             };
         }
@@ -156,21 +156,12 @@ fn main() {
             Some(x) => {
                 let consec = github_graph(&x);
                 //TODO Docs didn't mention to_vec()? why so many layers?
-                let s = format!("\nHabits\n{}\n", consec);
-                match printer.write_all(&s.as_bytes()) {
-                    Err(why) => panic!("couldn't write to printer: {}", why),
-                    Ok(_) => println!("successfully wrote to {}", display),
-                };
+                println!("\nHabits\n{}\n", consec);
             }
             None => println!("No games to log: {:?}", &u),
         };
 
-        let string = string_from_items(all_events);
-        match printer.write_all(&string.as_bytes()) {
-            Err(why) => panic!("couldn't write to printer: {}", why),
-            Ok(_) => println!("successfully wrote to {}", display),
-        };
-        println!("\n\n\n{}\n\n\n", string);
+        println!("{}", string_from_items(all_events));
     };
 
     let check_ynab_api =
@@ -244,12 +235,13 @@ fn main() {
     });
 
     ping_server();
+    print_next_five_days();
     cron.add(Job::new("0 30 * * * *".parse().unwrap(), ping_server));
     cron.add(Job::new(
         "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
         print_next_five_days,
     ));
-    cron.add(Job::new("0 0 /3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
+//    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), YPGR-KGLMcheck_ynab_api)); //Hours divisible by 3
     loop {
         cron.tick();
 
