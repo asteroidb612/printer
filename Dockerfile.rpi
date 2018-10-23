@@ -1,7 +1,7 @@
 ################################################################################
 # Arguments
 ################################################################################
-ARG rust_revision="1.29.1"
+ARG rust_revision="nightly"
 
 ################################################################################
 # Base image
@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 FROM base as rust
 
 # Install build tools
-RUN apt-get -q update && apt-get install -yq --no-install-recommends build-essential curl file
+RUN apt-get -q update && apt-get install -yq --no-install-recommends build-essential curl file pkg-config libssl-dev
 
 ENV PATH=/root/.cargo/bin:$PATH
 
@@ -70,7 +70,7 @@ COPY --from=dependencies /build/app/target /build/app/target
 
 # Build real app
 WORKDIR /build/app
-RUN rm -rf target/release/hello*
+RUN rm -rf target/release/lumberjack*
 RUN cargo build --release
 
 ################################################################################
@@ -81,11 +81,11 @@ FROM base
 
 # Copy binary from builder image
 WORKDIR /app
-COPY --from=builder /build/app/target/release/hello .
+COPY --from=builder /build/app/target/release/lumberjack .
 
 # Copy other folders required by the application. Example:
 #
 # COPY --from=builder /build/app/assets ./assets
 
 # Launch application
-CMD ["/app/hello", "%%RESIN_MACHINE_NAME%%"]
+CMD ["/app/lumberjack", "%%RESIN_MACHINE_NAME%%"]

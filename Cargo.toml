@@ -8,7 +8,7 @@ job_scheduler = "*"
 hyper = "0.10.3"
 hyper-rustls = "0.6.1"
 yup-oauth2 = "*"
-google-calendar3 = "1.0.7+20171205"
+google-calendar3 = "1.0.7"
 chrono = {version = "0.4.4", features = ["serde"] }
 itertools = "0.7.8"
 rouille = "2.2.0"
