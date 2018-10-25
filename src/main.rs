@@ -1,5 +1,4 @@
 extern crate chrono;
-extern crate gag;
 extern crate google_calendar3 as calendar3;
 extern crate hyper;
 extern crate hyper_rustls;
@@ -30,7 +29,6 @@ use chrono::prelude::Local;
 use chrono::Datelike;
 use chrono::Duration as OlderDuration; //recommended nameing in docs, i think
 use chrono::{Date, DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday, Weekday::*};
-use gag::Redirect;
 use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
     MemoryStorage,
@@ -38,6 +36,7 @@ use oauth2::{
 use rouille::Response;
 use std::default::Default;
 use std::sync::{Arc, Mutex};
+use std::process::Command;
 
 #[cfg(target_os = "macos")]
 static DEFAULT_PATH: &str = "./output";
@@ -45,6 +44,12 @@ static DEFAULT_PATH: &str = "./output";
 static DEFAULT_PATH: &str = "/dev/serial0";
 
 fn main() {
+    Command::new("stty")
+        .arg("-F")
+        .arg("/dev/serial0")
+        .arg("19200")
+        .spawn()
+        .expect("Couldn't set printer baudrate");
     {
         let mut secret_file = File::create("/secret").expect("Couldn't create file");
         let google_oauth_json =
@@ -74,13 +79,15 @@ fn main() {
     let hub2 = hub.clone(); //Appease borrow checking gods
 
     // Open a file in write-only mode, returns `io::Result<File>`
-    let printer = match File::create(Path::new(DEFAULT_PATH)) {
+    let mut printer = match File::create(Path::new(DEFAULT_PATH)) {
         //I have a lot of good case studies in here for moving/borrowing... this is one...
         Err(why) => panic!("couldn't create file in write-only mode: {}", why),
         Ok(file) => file,
     };
-    Redirect::stdout(printer).unwrap();
-    println!("It's working... It's working!");
+    let mut print = |s: String| {
+        printer.write_all(s.as_bytes()).expect("Unable to print");
+    };
+    print(String::from("It's working... It's working!"));
 
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
@@ -122,7 +129,7 @@ fn main() {
             .doit();
     };
 
-    let print_next_five_days = move || {
+    let mut print_next_five_days = move || {
         let now = Local::now();
         let next_week = now
             .clone()
@@ -150,12 +157,12 @@ fn main() {
                             all_events.append(&mut e);
                         }
                         None => {
-                            println!("No events on calendar {}", calendar);
+                            print(format!("No events on calendar {}", calendar));
                         }
                     };
                 }
                 x => {
-                    println!("\n\nUnable to connect to Google: {:?} ", x);
+                    print(format!("\n\nUnable to connect to Google: {:?} ", x));
                 }
             };
         }
@@ -165,15 +172,15 @@ fn main() {
             Some(x) => {
                 let consec = github_graph(&x);
                 //TODO Docs didn't mention to_vec()? why so many layers?
-                println!("\nHabits\n{}\n", consec);
+                print(format!("\nHabits\n{}\n", consec));
             }
-            None => println!("No games to log: {:?}", &u),
+            None => print(format!("No games to log: {:?}", &u)),
         };
 
-        println!("{}", string_from_items(all_events));
+        print(format!("{}", string_from_items(all_events)));
     };
 
-    let check_ynab_api =
+    let _check_ynab_api =
         move || {
             let client = reqwest::Client::new();
             let url = "";

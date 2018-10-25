@@ -81,4 +81,5 @@ COPY --from=builder /build/app/target/debug/lumberjack .
 # COPY --from=builder /build/app/assets ./assets
 
 # Launch application
+RUN stty -F /dev/serial0 19200
 CMD ["/app/lumberjack", "raspberrypi3"]

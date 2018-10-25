@@ -87,5 +87,7 @@ COPY --from=builder /build/app/target/release/lumberjack .
 #
 # COPY --from=builder /build/app/assets ./assets
 
+#Set baudrate
+RUN stty -F /dev/serial0 19200
 # Launch application
 CMD ["/app/lumberjack", "%%RESIN_MACHINE_NAME%%"]
