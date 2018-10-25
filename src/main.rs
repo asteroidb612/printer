@@ -56,11 +56,6 @@ fn main() {
 
     let secret: ApplicationSecret =
         read_application_secret(&Path::new("/secret")).expect("Couldn't read application secret");
-    // Instantiate the authenticator. It will choose a suitable authentication flow for you,
-    // unless you replace  `None` with the desired Flow.
-    // Provide your own `AuthenticatorDelegate` to adjust the way it operates and get feedback about
-    // what's going on. You probably want to bring in your own `TokenStorage` to persist tokens and
-    // retrieve them from storage.
     let auth = Authenticator::new(
         &secret,
         DefaultAuthenticatorDelegate,
@@ -85,7 +80,7 @@ fn main() {
         Ok(file) => file,
     };
     Redirect::stdout(printer).unwrap();
-    println!("Hello World!\n\nIt's working... It's working!");
+    println!("It's working... It's working!");
 
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
