@@ -198,7 +198,7 @@ fn main() {
                     _ => true,
                 }
             }) {
-                let mut model = share_for_ynab.lock().unwrap();
+                let mut model = share_for_ynab.lock().expect("Couldn't unlock YNAB share");
                 *model = updated(
                     &mut *model,
                     Msg::GameOccurence("ynab".to_owned(), Local::now()),
@@ -210,11 +210,11 @@ fn main() {
         rouille::start_server("0.0.0.0:3030", move |request| {
             router!(request,
             (GET) (/) => {
-                let file = File::open("site/index.html").unwrap();
+                let file = File::open("site/index.html").expect("Couldn't find index.html");
                 Response::from_file("text/html; charset=utf8", file)
             },
             _ => {
-                let mut store = share_for_web_interface.lock().unwrap();
+                let mut store = share_for_web_interface.lock().expect("Couldn't find Rouille share");
                 //I want a mutable borrow, not a move
                 // Can you pass a mutable borrow to functions?
                 // Can you set an immutable borrow?
