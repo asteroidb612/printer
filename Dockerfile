@@ -1,7 +1,7 @@
 ################################################################################
 # Arguments
 ################################################################################
-ARG rust_revision="nightly"
+ARG rust_revision="stable"
 
 ################################################################################
 # Base image
@@ -23,8 +23,15 @@ RUN apt-get -q update && apt-get install -yq --no-install-recommends build-essen
 
 ENV PATH=/root/.cargo/bin:$PATH
 
+# https://forums.resin.io/t/rustup-fails-for-armv8l/2661
+# -> https://forums.resin.io/t/resin-build-variable-inconsistency/1571/2
+# -> https://github.com/resin-io/docs/issues/739
+#
+# https://github.com/rust-lang-nursery/rustup.rs/issues/1055
+RUN cp `which uname` /bin/uname-orig && echo '#!/bin/bash\nif [[ $1 == "-m" ]]; then echo "armv7l"; else /bin/uname-orig $@; fi;' > `which uname`
+
 # Install specific version of Rust (see ARG)
-RUN curl -sSf https://static.rust-lang.org/rustup.sh | sh -s -- -y --revision=CATAMARAN
+RUN curl -sSf https://static.rust-lang.org/rustup.sh | sh -s -- -y --revision=${rust_revision}
 
 ################################################################################
 # Dependencies
@@ -44,7 +51,7 @@ COPY Cargo.* /build/app/
 
 # Build fake project with real dependencies
 WORKDIR /build/app
-RUN cargo build
+RUN cargo build --release
 
 ################################################################################
 # Builder
@@ -63,8 +70,8 @@ COPY --from=dependencies /build/app/target /build/app/target
 
 # Build real app
 WORKDIR /build/app
-RUN rm -rf target/debug/lumberjack*
-RUN cargo build
+RUN rm -rf target/release/lumberjack*
+RUN cargo build --release
 
 ################################################################################
 # Final image
@@ -74,12 +81,19 @@ FROM base
 
 # Copy binary from builder image
 WORKDIR /app
-COPY --from=builder /build/app/target/debug/lumberjack .
+COPY --from=builder /build/app/target/release/lumberjack .
+
+COPY site/index.html site/index.html
 
 # Copy other folders required by the application. Example:
 #
 # COPY --from=builder /build/app/assets ./assets
 
+#Set Baudrate
+#RUN stty -F /dev/serial0 19200
+#debug
+RUN ls /dev
+
+EXPOSE 3030:80
 # Launch application
-RUN stty -F /dev/serial0 19200
-CMD ["/app/lumberjack", "raspberrypi3"]
+CMD ["/app/lumberjack"]
