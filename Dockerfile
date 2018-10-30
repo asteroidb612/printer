@@ -73,6 +73,20 @@ WORKDIR /build/app
 RUN rm -rf target/release/lumberjack*
 RUN cargo build --release
 
+
+################################################################################
+# Elm Builder
+################################################################################
+
+FROM ubuntu:18.04 as elm
+RUN apt-get update -y
+RUN apt-get install -y curl wget gnupg2 nodejs npm
+RUN npm install -g elm
+COPY site/ .
+RUN rm -rf elm-stuff/
+RUN rm -rf /root/.elm
+RUN elm make src/Main.elm
+
 ################################################################################
 # Final image
 ################################################################################
@@ -83,7 +97,7 @@ FROM base
 WORKDIR /app
 COPY --from=builder /build/app/target/release/lumberjack .
 
-COPY site/index.html site/index.html
+COPY --from=elm index.html site/index.html
 
 # Copy other folders required by the application. Example:
 #
