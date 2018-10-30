@@ -6,6 +6,8 @@ extern crate itertools;
 extern crate job_scheduler;
 extern crate reqwest;
 extern crate yup_oauth2 as oauth2;
+extern crate serial;
+
 
 #[macro_use]
 extern crate serde_derive;
@@ -20,9 +22,9 @@ use itertools::Itertools;
 use std::env::var;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
 use std::time::Duration;
-
+use std::path::Path;
+use serial::prelude::*;
 use calendar3::CalendarHub;
 use chrono::offset::*;
 use chrono::prelude::Local;
@@ -44,6 +46,13 @@ static DEFAULT_PATH: &str = "./output";
 static DEFAULT_PATH: &str = "/dev/serial0";
 
 fn main() {
+    let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
+    port.reconfigure(&mut |settings| {
+        settings.set_baud_rate(serial::Baud19200)
+    }).expect("Couldn't set baudrate");
+    port.write("Fuck Accordions".as_bytes()).expect("Couldn't write to serial port");
+
+
     Command::new("stty")
         .arg("-F")
         .arg("/dev/serial0")
@@ -315,23 +324,23 @@ fn weekday_name(w: Weekday) -> std::string::String {
     name.to_owned()
 }
 
-//fn consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
-//    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
-//    let mut max = 0;
-//    let dates2 = dates.clone(); //Eww
-//    for date in dates.into_iter() {
-//        let mut d = date.pred();
-//        let mut tmp = 1;
-//        while dates2.contains(&d) {
-//            d = d.pred();
-//            tmp = tmp + 1;
-//        }
-//        if max < tmp {
-//            max = tmp;
-//        }
-//    }
-//    max
-//}
+fn _consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
+    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+    let mut max = 0;
+    let dates2 = dates.clone(); //Eww
+    for date in dates.into_iter() {
+        let mut d = date.pred();
+        let mut tmp = 1;
+        while dates2.contains(&d) {
+            d = d.pred();
+            tmp = tmp + 1;
+        }
+        if max < tmp {
+            max = tmp;
+        }
+    }
+    max
+}
 
 fn github_graph(g: &Game) -> String {
     let dates = &g
@@ -426,3 +435,4 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
         },
     }
 }
+ 
