@@ -5,9 +5,8 @@ extern crate hyper_rustls;
 extern crate itertools;
 extern crate job_scheduler;
 extern crate reqwest;
-extern crate yup_oauth2 as oauth2;
 extern crate serial;
-
+extern crate yup_oauth2 as oauth2;
 
 #[macro_use]
 extern crate serde_derive;
@@ -16,29 +15,27 @@ extern crate serde_json;
 #[macro_use]
 extern crate rouille;
 
-use job_scheduler::{Job, JobScheduler};
-
-use itertools::Itertools;
-use std::env::var;
-use std::fs::File;
-use std::io::prelude::*;
-use std::time::Duration;
-use std::path::Path;
-use serial::prelude::*;
 use calendar3::CalendarHub;
 use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
 use chrono::Duration as OlderDuration; //recommended nameing in docs, i think
 use chrono::{Date, DateTime, NaiveDate, NaiveDateTime, NaiveTime, Weekday, Weekday::*};
+use itertools::Itertools;
+use job_scheduler::{Job, JobScheduler};
 use oauth2::{
-    read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
-    MemoryStorage,
+    read_application_secret, ApplicationSecret, Authenticator, AuthenticatorDelegate,
+    MemoryStorage, PollInformation,
 };
 use rouille::Response;
+use serial::prelude::*;
 use std::default::Default;
+use std::env::var;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::process::Command;
+use std::time::Duration;
 
 #[cfg(target_os = "macos")]
 static DEFAULT_PATH: &str = "./output";
@@ -47,18 +44,11 @@ static DEFAULT_PATH: &str = "/dev/serial0";
 
 fn main() {
     let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
-    port.reconfigure(&mut |settings| {
-        settings.set_baud_rate(serial::Baud19200)
-    }).expect("Couldn't set baudrate");
-    port.write("Fuck Accordions".as_bytes()).expect("Couldn't write to serial port");
+    port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
+        .expect("Couldn't set baudrate");
+    port.write("Fuck Accordions".as_bytes())
+        .expect("Couldn't write to serial port");
 
-
-    Command::new("stty")
-        .arg("-F")
-        .arg("/dev/serial0")
-        .arg("19200")
-        .spawn()
-        .expect("Couldn't set printer baudrate");
     {
         let mut secret_file = File::create("/secret").expect("Couldn't create file");
         let google_oauth_json =
@@ -72,7 +62,7 @@ fn main() {
         read_application_secret(&Path::new("/secret")).expect("Couldn't read application secret");
     let auth = Authenticator::new(
         &secret,
-        DefaultAuthenticatorDelegate,
+        PrinterAuthenticatorDelegate,
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
         )),
@@ -435,4 +425,21 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
         },
     }
 }
- 
+
+pub struct PrinterAuthenticatorDelegate;
+impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
+    fn present_user_code(&mut self, pi: &PollInformation) {
+        let mut port = serial::open(Path::new("/dev/serial0"))
+            .expect("PrinterAuthenticatorDelegate couldn't open /dev/serial0");
+        port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
+            .expect("PrinterAuthenticatorDelegate Couldn't set baudrate");
+        port.write(
+            format!(
+                "Please enter {} at {} and grant access to this application",
+                pi.user_code, pi.verification_url
+            )
+            .as_bytes(),
+        )
+        .expect("PrinterAuthenticatorDelegate Couldn't write to serial port");
+    }
+}
