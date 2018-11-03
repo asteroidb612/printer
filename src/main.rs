@@ -208,7 +208,7 @@ fn main() {
         };
 
     std::thread::spawn(|| {
-        rouille::start_server("0.0.0.0:3030", move |request| {
+        rouille::start_server("0.0.0.0:80", move |request| {
             router!(request,
             (GET) (/) => {
                 let file = File::open("site/index.html").expect("Couldn't find index.html");
