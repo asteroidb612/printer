@@ -95,7 +95,7 @@ COPY site/index.html site/index.html
 #debug
 RUN ls /dev
 
-EXPOSE 3030:80
+EXPOSE 80:3030
 # Launch application
 CMD ["/app/lumberjack"]
 
