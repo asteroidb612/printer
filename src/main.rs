@@ -85,7 +85,8 @@ fn main() {
         Ok(file) => file,
     };
     let mut print = |s: String| {
-        printer.write_all(s.as_bytes()).expect("Unable to print");
+        let formatted = format!("\n{}\n", s);
+        printer.write_all(formatted.as_bytes()).expect("Unable to print");
     };
     print(String::from("It's working... It's working!"));
 

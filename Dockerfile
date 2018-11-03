@@ -98,4 +98,3 @@ RUN ls /dev
 EXPOSE 80:3030
 # Launch application
 CMD ["/app/lumberjack"]
-
