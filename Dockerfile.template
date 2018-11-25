@@ -1,13 +1,8 @@
 ################################################################################
-# Arguments
-################################################################################
-ARG rust_revision="stable"
-
-################################################################################
 # Base image
 ################################################################################
 
-FROM resin/raspberrypi3-debian as base
+FROM resin/%%RESIN_MACHINE_NAME%%-debian as base
 
 ENV INITSYSTEM=on
 ENV DEBIAN_FRONTEND=noninteractive
@@ -23,15 +18,19 @@ RUN apt-get -q update && apt-get install -yq --no-install-recommends build-essen
 
 ENV PATH=/root/.cargo/bin:$PATH
 
+# Modify `uname -m` for `arm7hf` and `rpi` RESIN_ARCH values:
 # https://forums.resin.io/t/rustup-fails-for-armv8l/2661
 # -> https://forums.resin.io/t/resin-build-variable-inconsistency/1571/2
 # -> https://github.com/resin-io/docs/issues/739
 #
 # https://github.com/rust-lang-nursery/rustup.rs/issues/1055
-RUN cp `which uname` /bin/uname-orig && echo '#!/bin/bash\nif [[ $1 == "-m" ]]; then echo "armv7l"; else /bin/uname-orig $@; fi;' > `which uname`
+WORKDIR /build
+COPY scripts/modify-uname.sh .
+RUN ./modify-uname.sh %%RESIN_ARCH%%
 
-# Install specific version of Rust (see ARG)
-RUN curl -sSf https://static.rust-lang.org/rustup.sh | sh -s -- -y --revision=${rust_revision}
+# Install rustup downloading the version specified by the standard rust-toolchain file
+COPY rust-toolchain .
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain `cat rust-toolchain`
 
 ################################################################################
 # Dependencies
@@ -39,19 +38,23 @@ RUN curl -sSf https://static.rust-lang.org/rustup.sh | sh -s -- -y --revision=${
 
 FROM rust as dependencies
 
-# Required by `cargo new app`
-ENV USER=root
-
-# Create new fake project
 WORKDIR /build
-RUN cargo new app
+
+# Create new fake project ($USER is needed by `cargo new`)
+RUN USER=root cargo new app
+
+WORKDIR /build/app
 
 # Copy real app dependencies
-COPY Cargo.* /build/app/
+COPY Cargo.* ./
+# Copy the file specifying the Rust version to use
+COPY rust-toolchain ./
 
 # Build fake project with real dependencies
-WORKDIR /build/app
 RUN cargo build --release
+
+# Remove the fake app build artifacts
+RUN rm -rf target/release/lumberjack* target/release/deps/lumberjack-*
 
 ################################################################################
 # Builder
@@ -62,30 +65,16 @@ FROM rust as builder
 # We do not want to download deps, update registry, ... again
 COPY --from=dependencies /root/.cargo /root/.cargo
 
+WORKDIR /build/app
+
 # Copy everything, not just source code
-COPY . /build/app
+COPY . .
 
 # Update already built deps from dependencies image
-COPY --from=dependencies /build/app/target /build/app/target
+COPY --from=dependencies /build/app/target target
 
 # Build real app
-WORKDIR /build/app
-RUN rm -rf target/release/lumberjack*
 RUN cargo build --release
-
-
-################################################################################
-# Elm Builder
-################################################################################
-
-FROM ubuntu:18.04 as elm
-RUN apt-get update -y
-RUN apt-get install -y curl wget gnupg2 nodejs npm
-RUN npm install -g elm
-COPY site/ .
-RUN rm -rf elm-stuff/
-RUN rm -rf /root/.elm
-RUN elm make src/Main.elm
 
 ################################################################################
 # Final image
@@ -93,21 +82,14 @@ RUN elm make src/Main.elm
 
 FROM base
 
-# Copy binary from builder image
 WORKDIR /app
+
+# Copy binary from builder image
 COPY --from=builder /build/app/target/release/lumberjack .
 
-COPY --from=elm index.html site/index.html
-
 # Copy other folders required by the application. Example:
-#
-# COPY --from=builder /build/app/assets ./assets
+# COPY --from=builder /build/app/assets assets
+COPY site/index.html ./site/index.html
 
-#Set Baudrate
-#RUN stty -F /dev/serial0 19200
-#debug
-RUN ls /dev
-
-EXPOSE 3030:80
 # Launch application
-CMD ["/app/lumberjack"]
+CMD ["./lumberjack"]

@@ -84,7 +84,8 @@ fn main() {
         Ok(file) => file,
     };
     let mut print = |s: String| {
-        printer.write_all(s.as_bytes()).expect("Unable to print");
+        let formatted = format!("\n{}\n", s);
+        printer.write_all(formatted.as_bytes()).expect("Unable to print");
     };
     print(String::from("It's working... It's working!"));
 
@@ -205,8 +206,9 @@ fn main() {
             }
         };
 
+    //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
-        rouille::start_server("0.0.0.0:3030", move |request| {
+        rouille::start_server("0.0.0.0:80", move |request| {
             router!(request,
             (GET) (/) => {
                 let file = File::open("site/index.html").expect("Couldn't find index.html");
