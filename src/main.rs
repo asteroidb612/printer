@@ -29,7 +29,6 @@ use oauth2::{
 };
 use rouille::Response;
 use serial::prelude::*;
-use serial::SystemPort;
 use std::default::Default;
 use std::env::var;
 use std::fs::File;
@@ -207,6 +206,7 @@ fn main() {
             }
         };
 
+    //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
         rouille::start_server("0.0.0.0:80", move |request| {
             router!(request,
