@@ -236,6 +236,7 @@ fn main() {
                 //https://stackoverflow.com/questions/51335679/where-is-a-mutexguard-if-i-never-assign-it-to-a-variable
                 *store = updated(&mut *store, Msg::GameOccurence(request.url(), Local::now()));
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
+                println!("{}", serialized);
 
                 let path = Path::new("./store.json");
                 let mut file = match File::create(path) {
