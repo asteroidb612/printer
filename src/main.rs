@@ -91,21 +91,32 @@ fn main() {
 
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
+    //TODO I'm not erring when these don't match...
     let model = Model {
         games: match File::open(&path) {
-            Err(_why) => vec![],
+            Err(_why) => {
+                print!("Couldn't open {:#?}\nContinuing.", path);
+                vec![]
+            },
             Ok(mut file) => {
                 let mut s = String::new();
                 match file.read_to_string(&mut s) {
-                    Err(_why) => vec![],
+                    Err(_why) => {
+                        print!("Couldn't read file {:#?}\nContinuing.", path);
+                        vec![]
+                    },
                     Ok(_) => match serde_json::from_str(&mut s) {
-                        Err(_why) => vec![],
+                        Err(_why) => {
+                            print!("Couldn't parse {:#?}\nContinuing", path);
+                            vec![]
+                        },
                         Ok(parsed_store) => parsed_store,
                     },
                 }
             }
         },
     };
+    print!("Initial Model {:?}", model);
     let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
     let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
     let share_for_ynab = share_for_web_interface.clone();
