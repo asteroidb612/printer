@@ -37,17 +37,37 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-#[cfg(target_os = "macos")]
-static DEFAULT_PATH: &str = "./output";
-#[cfg(target_os = "linux")]
-static DEFAULT_PATH: &str = "/dev/serial0";
-
 fn main() {
-    let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
-    port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
-        .expect("Couldn't set baudrate");
-    port.write("Fuck Accordions".as_bytes())
-        .expect("Couldn't write to serial port");
+    let mut write_to = if cfg!(target_os = "macos") {
+        let mut log = File::open(Path::new("./output")).expect("Couldn't open ./output");
+        log.write("Fuck Accordions".as_bytes())
+            .expect("Couldn't write to log");
+        // Open a file in write-only mode, returns `io::Result<File>`
+        match File::create(Path::new("./output")) {
+            //I have a lot of good case studies in here for moving/borrowing... this is one...
+            Err(why) => panic!("couldn't create file in write-only mode: {}", why),
+            Ok(file) => file,
+        }
+    } else {
+        let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
+        port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
+            .expect("Couldn't set baudrate");
+        port.write("Fuck Accordions".as_bytes())
+            .expect("Couldn't write to serial port");
+        // Open a file in write-only mode, returns `io::Result<File>`
+        match File::create(Path::new("/dev/serial0")) {
+            //I have a lot of good case studies in here for moving/borrowing... this is one...
+            Err(why) => panic!("couldn't create file in write-only mode: {}", why),
+            Ok(file) => file,
+        }
+    };
+    let mut print = |s: String| {
+        let formatted = format!("\n{}\n", s);
+        write_to
+            .write_all(formatted.as_bytes())
+            .expect("Unable to print");
+    };
+    print(String::from("It's working... It's working!"));
 
     {
         let mut secret_file = File::create("/secret").expect("Couldn't create file");
@@ -66,7 +86,7 @@ fn main() {
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
         )),
-        <MemoryStorage as Default>::default(), //TODO Is this not real memory storage? Could I get rid of Ping with this?
+        <MemoryStorage as Default>::default(), //TODO Is this volatile storage? Could I get rid of Ping with this?
         None,
     );
     let hub = Arc::new(Mutex::new(CalendarHub::new(
@@ -77,18 +97,6 @@ fn main() {
     )));
     let hub2 = hub.clone(); //Appease borrow checking gods
 
-    // Open a file in write-only mode, returns `io::Result<File>`
-    let mut printer = match File::create(Path::new(DEFAULT_PATH)) {
-        //I have a lot of good case studies in here for moving/borrowing... this is one...
-        Err(why) => panic!("couldn't create file in write-only mode: {}", why),
-        Ok(file) => file,
-    };
-    let mut print = |s: String| {
-        let formatted = format!("\n{}\n", s);
-        printer.write_all(formatted.as_bytes()).expect("Unable to print");
-    };
-    print(String::from("It's working... It's working!"));
-
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
     //TODO I'm not erring when these don't match...
@@ -97,19 +105,19 @@ fn main() {
             Err(_why) => {
                 print!("Couldn't open {:#?}\nContinuing.", path);
                 vec![]
-            },
+            }
             Ok(mut file) => {
                 let mut s = String::new();
                 match file.read_to_string(&mut s) {
                     Err(_why) => {
                         print!("Couldn't read file {:#?}\nContinuing.", path);
                         vec![]
-                    },
+                    }
                     Ok(_) => match serde_json::from_str(&mut s) {
                         Err(_why) => {
                             print!("Couldn't parse {:#?}\nContinuing", path);
                             vec![]
-                        },
+                        }
                         Ok(parsed_store) => parsed_store,
                     },
                 }
@@ -434,8 +442,7 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                     } else {
                         stored_game
                     }
-                })
-                .collect(),
+                }).collect(),
         },
     }
 }
@@ -443,17 +450,20 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
 pub struct PrinterAuthenticatorDelegate;
 impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
     fn present_user_code(&mut self, pi: &PollInformation) {
-        let mut port = serial::open(Path::new("/dev/serial0"))
-            .expect("PrinterAuthenticatorDelegate couldn't open /dev/serial0");
-        port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
-            .expect("PrinterAuthenticatorDelegate Couldn't set baudrate");
-        port.write(
-            format!(
+        if cfg!(target_os = "macos") {
+            println!(
                 "Please enter {} at {} and grant access to this application",
                 pi.user_code, pi.verification_url
             )
-            .as_bytes(),
-        )
-        .expect("PrinterAuthenticatorDelegate Couldn't write to serial port");
+        } else {
+            let mut port = serial::open(Path::new("/dev/serial0"))
+                .expect("PrinterAuthenticatorDelegate couldn't open /dev/serial0");
+            port.write(
+                format!(
+                    "Please enter {} at {} and grant access to this application",
+                    pi.user_code, pi.verification_url
+                ).as_bytes(),
+            ).expect("PrinterAuthenticatorDelegate Couldn't write to serial port");
+        }
     }
 }
