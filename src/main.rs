@@ -5,13 +5,13 @@ extern crate hyper_rustls;
 extern crate itertools;
 extern crate job_scheduler;
 extern crate reqwest;
+extern crate serde;
+extern crate serde_json;
 extern crate serial;
 extern crate yup_oauth2 as oauth2;
 
 #[macro_use]
 extern crate serde_derive;
-extern crate serde;
-extern crate serde_json;
 #[macro_use]
 extern crate rouille;
 
@@ -108,19 +108,19 @@ fn main() {
     let model = Model {
         games: match File::open(&path) {
             Err(_why) => {
-                print!("Couldn't open {:#?}\nContinuing.", path);
+                print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
                 vec![]
             }
             Ok(mut file) => {
                 let mut s = String::new();
                 match file.read_to_string(&mut s) {
                     Err(_why) => {
-                        print!("Couldn't read file {:#?}\nContinuing.", path);
+                        print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
                         vec![]
                     }
                     Ok(_) => match serde_json::from_str(&mut s) {
                         Err(_why) => {
-                            print!("Couldn't parse {:#?}\nContinuing", path);
+                            print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
                             vec![]
                         }
                         Ok(parsed_store) => parsed_store,
@@ -129,7 +129,6 @@ fn main() {
             }
         },
     };
-    print!("Initial Model {:?}", model);
     let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
     let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
     let share_for_ynab = share_for_web_interface.clone();
@@ -162,8 +161,7 @@ fn main() {
 
         let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io", "fb Calendar"];
         let mut all_events = vec![];
-        // You can configure optional parameters by calling the respective setters at will, and
-        // execute the final call using `doit()`.
+
         for calendar in calendars.iter() {
             let result = hub2
                 .lock()
@@ -283,7 +281,7 @@ fn main() {
         "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
         print_next_five_days,
     ));
-    //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), YPGR-KGLMcheck_ynab_api)); //Hours divisible by 3
+    //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
     loop {
         cron.tick();
 
@@ -293,31 +291,39 @@ fn main() {
 
 fn string_from_items(items: Vec<calendar3::Event>) -> std::string::String {
     let mut return_string: std::string::String = "".to_string();
-    let simplified_events = items.into_iter().map(|event| {
-        let start = event.start.expect("No start time for event");
-        //TODO I really wanna break out this date logic, but I can't think of what the type interface would be
-        let when = match start.date {
-            Some(time) => {
-                let date = NaiveDate::parse_from_str(&time, "%Y-%m-%d")
-                    .expect("Couldn't parse into Naive Date");
-                let time = NaiveTime::from_hms(0, 0, 0);
-                let date_time = NaiveDateTime::new(date, time);
-                FixedOffset::west(7 * 3600)
-                    .from_local_datetime(&date_time)
-                    .unwrap()
-            }
-            None => match start.date_time {
-                Some(time) => DateTime::parse_from_rfc3339(&time).expect("Couldn't parse dates"),
-                None => panic!("There isn't a date or a date_time on event {:?}", start),
+
+    let sorted_events = items
+        .iter()
+        .filter_map(|i| match &i.start {
+            //Only good events
+            Some(start) => match &i.summary {
+                Some(summary) => Some((summary, start)),
+                None => None,
             },
-        };
-        let summary = event.summary.expect("No summary for event");
-        (when, summary)
-    });
+            None => None,
+        }).map(|(summary, start)| {
+            //Get sensible date representation
+            let when = match &start.date {
+                Some(time) => {
+                    let date = NaiveDate::parse_from_str(&time, "%Y-%m-%d")
+                        .expect("Couldn't parse into Naive Date");
+                    let time = NaiveTime::from_hms(0, 0, 0);
+                    let date_time = NaiveDateTime::new(date, time);
+                    FixedOffset::west(7 * 3600)
+                        .from_local_datetime(&date_time)
+                        .unwrap()
+                }
+                None => match &start.date_time {
+                    Some(time) => {
+                        DateTime::parse_from_rfc3339(&time).expect("Couldn't parse dates")
+                    }
+                    None => panic!("There isn't a date or a date_time on event {:?}", start),
+                },
+            };
+            (when, summary)
+        }).sorted_by_key(|t| t.0); //And sort
 
-    let sorted_events = simplified_events.sorted_by_key(|t| t.0);
-
-    for (key, group) in &sorted_events.into_iter().group_by(|t| t.0.date().weekday()) {
+    for (key, group) in &sorted_events.iter().group_by(|t| t.0.date().weekday()) {
         return_string.push_str(&format!("{}:\n", weekday_name(key)));
         for event in group.into_iter() {
             //TODO Print time for each event
@@ -455,16 +461,9 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
 pub struct PrinterAuthenticatorDelegate;
 impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
     fn present_user_code(&mut self, pi: &PollInformation) {
-        if cfg!(target_os = "macos") {
-            println!(
-                "Please enter {} at {} and grant access to this application",
-                pi.user_code, pi.verification_url
-            )
-        } else {
-            print(format!(
-                "Please enter {} at {} and grant access to this application",
-                pi.user_code, pi.verification_url
-            ))
-        }
+        print(format!(
+            "Please enter {} at {} and grant access to this application",
+            pi.user_code, pi.verification_url
+        ))
     }
 }
