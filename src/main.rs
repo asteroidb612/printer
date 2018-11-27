@@ -37,40 +37,32 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-fn main() {
-    let mut write_to = if cfg!(target_os = "macos") {
-        let mut log = File::open(Path::new("./output")).expect("Couldn't open ./output");
-        log.write("Fuck Accordions".as_bytes())
-            .expect("Couldn't write to log");
-        // Open a file in write-only mode, returns `io::Result<File>`
-        match File::create(Path::new("./output")) {
-            //I have a lot of good case studies in here for moving/borrowing... this is one...
-            Err(why) => panic!("couldn't create file in write-only mode: {}", why),
-            Ok(file) => file,
-        }
-    } else {
-        let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
-        port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
-            .expect("Couldn't set baudrate");
-        port.write("Fuck Accordions".as_bytes())
-            .expect("Couldn't write to serial port");
-        // Open a file in write-only mode, returns `io::Result<File>`
-        match File::create(Path::new("/dev/serial0")) {
-            //I have a lot of good case studies in here for moving/borrowing... this is one...
-            Err(why) => panic!("couldn't create file in write-only mode: {}", why),
-            Ok(file) => file,
-        }
-    };
-    let mut print = |s: String| {
-        let formatted = format!("\n{}\n", s);
-        write_to
-            .write_all(formatted.as_bytes())
-            .expect("Unable to print");
-    };
-    print(String::from("It's working... It's working!"));
+#[cfg(target_os = "linux")]
+static PRINTER_PATH: &str = "/dev/serial0";
+#[cfg(target_os = "linux")]
+static PORT: &str = "0.0.0.0:80";
 
-    {
-        let mut secret_file = File::create("/secret").expect("Couldn't create file");
+#[cfg(target_os = "macos")]
+static PRINTER_PATH: &str = "./output";
+#[cfg(target_os = "macos")]
+static PORT: &str = "0.0.0.0:8080";
+
+fn print(s: String) {
+    let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
+        //I have a lot of good case studies in here for moving/borrowing... this is one...
+        Err(why) => panic!("couldn't create file in write-only mode: {}", why),
+        Ok(mut file) => file,
+    };
+
+    let formatted = format!("\n{}\n", s);
+    write_to
+        .write_all(formatted.as_bytes())
+        .expect("Unable to print");
+}
+
+fn secret() -> oauth2::ApplicationSecret {
+    if cfg!(target_os = "linux") {
+        let mut secret_file = File::create("./secret").expect("Couldn't create file for secret");
         let google_oauth_json =
             var("google_oauth_json").expect("Couldn't find google_oauth_json env var");
         secret_file
@@ -79,9 +71,22 @@ fn main() {
     }
 
     let secret: ApplicationSecret =
-        read_application_secret(&Path::new("/secret")).expect("Couldn't read application secret");
+        read_application_secret(&Path::new("./secret")).expect("Couldn't read application secret");
+    secret
+}
+
+fn main() {
+    if cfg!(target_os = "linux") {
+        let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
+        port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
+            .expect("Couldn't set baudrate");
+        port.write("Fuck Accordions".as_bytes())
+            .expect("Couldn't write to serial port");
+    }
+    print(String::from("It's working... It's working!"));
+
     let auth = Authenticator::new(
-        &secret,
+        &secret(),
         PrinterAuthenticatorDelegate,
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
@@ -148,7 +153,7 @@ fn main() {
             .doit();
     };
 
-    let mut print_next_five_days = move || {
+    let print_next_five_days = move || {
         let now = Local::now();
         let next_week = now
             .clone()
@@ -227,7 +232,7 @@ fn main() {
 
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
-        rouille::start_server("0.0.0.0:80", move |request| {
+        rouille::start_server(PORT, move |request| {
             router!(request,
             (GET) (/) => {
                 let file = File::open("site/index.html").expect("Couldn't find index.html");
@@ -456,14 +461,10 @@ impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
                 pi.user_code, pi.verification_url
             )
         } else {
-            let mut port = serial::open(Path::new("/dev/serial0"))
-                .expect("PrinterAuthenticatorDelegate couldn't open /dev/serial0");
-            port.write(
-                format!(
-                    "Please enter {} at {} and grant access to this application",
-                    pi.user_code, pi.verification_url
-                ).as_bytes(),
-            ).expect("PrinterAuthenticatorDelegate Couldn't write to serial port");
+            print(format!(
+                "Please enter {} at {} and grant access to this application",
+                pi.user_code, pi.verification_url
+            ))
         }
     }
 }
