@@ -41,11 +41,16 @@ use std::time::Duration;
 static PRINTER_PATH: &str = "/dev/serial0";
 #[cfg(target_os = "linux")]
 static PORT: &str = "0.0.0.0:80";
+#[cfg(target_os = "linux")]
+static STORAGE: &str = "/data/store.json";
 
 #[cfg(target_os = "macos")]
 static PRINTER_PATH: &str = "./output";
 #[cfg(target_os = "macos")]
 static PORT: &str = "0.0.0.0:8080";
+#[cfg(target_os = "macos")]
+static STORAGE: &str = "store.json";
+
 
 fn print(s: String) {
     let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
@@ -103,7 +108,7 @@ fn main() {
     let hub2 = hub.clone(); //Appease borrow checking gods
 
     let mut cron = JobScheduler::new();
-    let path = Path::new("store.json");
+    let path = Path::new(STORAGE);
     
     //TODO Clean up: This should have one error, one default call, and be flatter
     let model: Model = 
@@ -260,7 +265,7 @@ fn main() {
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
                 println!("{}", serialized);
 
-                let path = Path::new("./store.json");
+                let path = Path::new(STORAGE);
                 let mut file = match File::create(path) {
                     Err(_) => panic!("couldn't create file for server storage"),
                     Ok(file) => file
