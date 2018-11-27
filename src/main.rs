@@ -104,29 +104,29 @@ fn main() {
 
     let mut cron = JobScheduler::new();
     let path = Path::new("store.json");
-    //TODO I'm not erring when these don't match...
-    let model = Model {
-        games: match File::open(&path) {
+    
+    //TODO Clean up: This should have one error, one default call, and be flatter
+    let model: Model = 
+         match File::open(&path) {
             Err(_why) => {
                 print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
-                vec![]
+                Default::default()
             }
             Ok(mut file) => {
                 let mut s = String::new();
                 match file.read_to_string(&mut s) {
                     Err(_why) => {
                         print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
-                        vec![]
+                        Default::default()
                     }
                     Ok(_) => match serde_json::from_str(&mut s) {
                         Err(_why) => {
                             print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
-                            vec![]
+                            Default::default()
                         }
                         Ok(parsed_store) => parsed_store,
                     },
                 }
-            }
         },
     };
     let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
@@ -403,7 +403,7 @@ struct Event {
     when: chrono::DateTime<Local>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Game {
     name: String,
     //start: chrono::DateTime<Local>,
@@ -411,7 +411,7 @@ struct Game {
     events: Vec<Event>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Model {
     games: Vec<Game>,
 }
@@ -420,17 +420,17 @@ enum Msg {
     GameOccurence(String, chrono::DateTime<Local>),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct YNABResponse {
     data: Data,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct Data {
     transactions: Vec<Transaction>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct Transaction {
     approved: bool,
     flag_color: Option<String>,
@@ -444,6 +444,7 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                 .games
                 .into_iter()
                 .map(|mut stored_game| {
+                    println!("{:?} stored, {:?} sent", stored_game, game);
                     if stored_game.name == game {
                         stored_game.events.push(Event {
                             what: game.clone(),
