@@ -51,7 +51,6 @@ static PORT: &str = "0.0.0.0:8080";
 #[cfg(target_os = "macos")]
 static STORAGE: &str = "store.json";
 
-
 fn print(s: String) {
     let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
         //I have a lot of good case studies in here for moving/borrowing... this is one...
@@ -109,30 +108,29 @@ fn main() {
 
     let mut cron = JobScheduler::new();
     let path = Path::new(STORAGE);
-    
+
     //TODO Clean up: This should have one error, one default call, and be flatter
-    let model: Model = 
-         match File::open(&path) {
-            Err(_why) => {
-                print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
-                Default::default()
-            }
-            Ok(mut file) => {
-                let mut s = String::new();
-                match file.read_to_string(&mut s) {
+    let model: Model = match File::open(&path) {
+        Err(_why) => {
+            print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
+            Default::default()
+        }
+        Ok(mut file) => {
+            let mut s = String::new();
+            match file.read_to_string(&mut s) {
+                Err(_why) => {
+                    print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
+                    Default::default()
+                }
+                Ok(_) => match serde_json::from_str(&mut s) {
                     Err(_why) => {
-                        print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
+                        print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
                         Default::default()
                     }
-                    Ok(_) => match serde_json::from_str(&mut s) {
-                        Err(_why) => {
-                            print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
-                            Default::default()
-                        }
-                        Ok(parsed_store) => parsed_store,
-                    },
-                }
-        },
+                    Ok(parsed_store) => parsed_store,
+                },
+            }
+        }
     };
     let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
     let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
@@ -299,14 +297,8 @@ fn string_from_items(items: Vec<calendar3::Event>) -> std::string::String {
 
     let sorted_events = items
         .iter()
-        .filter_map(|i| match &i.start {
-            //Only good events
-            Some(start) => match &i.summary {
-                Some(summary) => Some((summary, start)),
-                None => None,
-            },
-            None => None,
-        }).map(|(summary, start)| {
+        .filter_map(|i| i.start.iter().zip(&i.summary).next())
+        .map(|(start, summary)| {
             //Get sensible date representation
             let when = match &start.date {
                 Some(time) => {
@@ -408,17 +400,34 @@ struct Event {
     when: chrono::DateTime<Local>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Game {
     name: String,
     //start: chrono::DateTime<Local>,
     //end: chrono::DateTime<Local>,
     events: Vec<Event>,
 }
+impl Default for Game {
+    fn default() -> Game {
+        //why the fuck am I repeating Game {...}
+        Game {
+            name: "/uke".to_string(),
+            events: vec![],
+        }
+    }
+}
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Model {
     games: Vec<Game>,
+}
+
+impl Default for Model {
+    fn default() -> Model {
+        Model {
+            games: vec![Default::default()],
+        }
+    }
 }
 
 enum Msg {
