@@ -25,7 +25,7 @@ use itertools::Itertools;
 use job_scheduler::{Job, JobScheduler};
 use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, AuthenticatorDelegate,
-    MemoryStorage, PollInformation,
+    DiskTokenStorage, PollInformation,
 };
 use rouille::Response;
 use serial::prelude::*;
@@ -43,6 +43,8 @@ static PRINTER_PATH: &str = "/dev/serial0";
 static PORT: &str = "0.0.0.0:80";
 #[cfg(target_os = "linux")]
 static STORAGE: &str = "/data/store.json";
+#[cfg(target_os = "linux")]
+static TOKEN_STORAGE: &str = "/data/token";
 
 #[cfg(target_os = "macos")]
 static PRINTER_PATH: &str = "./output";
@@ -50,6 +52,8 @@ static PRINTER_PATH: &str = "./output";
 static PORT: &str = "0.0.0.0:8080";
 #[cfg(target_os = "macos")]
 static STORAGE: &str = "store.json";
+#[cfg(target_os = "macos")]
+static TOKEN_STORAGE: &str = "token";
 
 fn print(s: String) {
     let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
@@ -89,13 +93,14 @@ fn main() {
     }
     print(String::from("It's working... It's working!"));
 
+    let token_storage =  DiskTokenStorage::new(&TOKEN_STORAGE.to_string()).expect("Couldn't use disk token storage");
     let auth = Authenticator::new(
         &secret(),
         PrinterAuthenticatorDelegate,
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
         )),
-        <MemoryStorage as Default>::default(), //TODO Is this volatile storage? Could I get rid of Ping with this?
+        token_storage,
         None,
     );
     let hub = Arc::new(Mutex::new(CalendarHub::new(
@@ -156,6 +161,7 @@ fn main() {
     };
 
     let print_next_five_days = move || {
+        println!("print_next_five_days");
         let now = Local::now();
         let next_week = now
             .clone()
