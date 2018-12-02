@@ -386,7 +386,7 @@ fn github_graph(g: &Game) -> String {
         date = date.pred()
     }
     let mut output = String::from(format!("Game {}\n", &g.name));
-    while date <= today {
+    while date < today {
         if date.weekday() == Sun {
             output.push_str("\n")
         }
