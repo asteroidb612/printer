@@ -93,7 +93,8 @@ fn main() {
     }
     print(String::from("It's working... It's working!"));
 
-    let token_storage =  DiskTokenStorage::new(&TOKEN_STORAGE.to_string()).expect("Couldn't use disk token storage");
+    let token_storage =
+        DiskTokenStorage::new(&TOKEN_STORAGE.to_string()).expect("Couldn't use disk token storage");
     let auth = Authenticator::new(
         &secret(),
         PrinterAuthenticatorDelegate,
@@ -168,7 +169,7 @@ fn main() {
             .checked_add_signed(OlderDuration::weeks(1))
             .expect("Time Overflow");
 
-        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io"]; 
+        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io"];
         let mut all_events = vec![];
 
         for calendar in calendars.iter() {
@@ -193,7 +194,10 @@ fn main() {
                     };
                 }
                 x => {
-                    print(format!("Unable to connect to Google when looking for calendar {}: {:?}", calendar, x));
+                    print(format!(
+                        "Unable to connect to Google when looking for calendar {}: {:?}",
+                        calendar, x
+                    ));
                 }
             };
         }
@@ -203,7 +207,7 @@ fn main() {
             Some(x) => {
                 let consec = github_graph(&x);
                 //TODO Docs didn't mention to_vec()? why so many layers?
-                print(format!("\nHabits\n{}\n", consec));
+                print(format!("Habits\n{}", consec));
             }
             None => print(format!("No games to log: {:?}", &u)),
         };
@@ -241,12 +245,44 @@ fn main() {
     std::thread::spawn(|| {
         rouille::start_server(PORT, move |request| {
             router!(request,
-            (GET) (/) => {
-                let file = File::open("site/index.html").expect("Couldn't find index.html");
+            (GET) ["/"] => {
+                let file = File::open("site/index.html").unwrap();
                 Response::from_file("text/html; charset=utf8", file)
             },
+            (GET) ["/games"] => {
+                let store = share_for_web_interface.lock().unwrap();
+                let serialized = serde_json::to_string(&store.clone()).unwrap();
+                Response::text(serialized)
+            },
+            (GET) ["/games/{name}", name: String] => {
+                 let store = share_for_web_interface.lock().unwrap();
+                 let mut games:Vec<&Game> = store.games.iter().filter(|g| g.name == name).collect(); //TODO Make impossible states impossible
+                 match games.pop(){
+                     Some(game) => {
+                         let serialized = serde_json::to_string(game).unwrap();
+                         Response::text(serialized)
+                         },
+                     None => Response::empty_404()
+                 }
+            },
+            (POST) ["/games/{name}", name:String] => {
+                let mut store = share_for_web_interface.lock().unwrap();
+                *store = updated(&mut *store, Msg::GameCreate(name));
+                let serialized = serde_json::to_string(&store.clone()).unwrap();
+
+                let path = Path::new(STORAGE);
+                let mut file = match File::create(path) {
+                    Err(_) => panic!("couldn't create file for server storage"),
+                    Ok(file) => file
+                };
+                match file.write_all(serialized.as_bytes()) {
+                    Err(_) => panic!("server couldn't write store to file"),
+                    Ok(_) => ()
+                };
+                Response::text(serialized)
+            },
             _ => {
-                let mut store = share_for_web_interface.lock().expect("Couldn't find Rouille share");
+                let mut store = share_for_web_interface.lock().unwrap();
                 //I want a mutable borrow, not a move
                 // Can you pass a mutable borrow to functions?
                 // Can you set an immutable borrow?
@@ -267,7 +303,6 @@ fn main() {
                 //https://stackoverflow.com/questions/51335679/where-is-a-mutexguard-if-i-never-assign-it-to-a-variable
                 *store = updated(&mut *store, Msg::GameOccurence(request.url(), Local::now()));
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
-                println!("{}", serialized);
 
                 let path = Path::new(STORAGE);
                 let mut file = match File::create(path) {
@@ -438,6 +473,7 @@ impl Default for Model {
 
 enum Msg {
     GameOccurence(String, chrono::DateTime<Local>),
+    GameCreate(String),
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -457,7 +493,7 @@ struct Transaction {
 }
 
 fn updated(model: &mut Model, msg: Msg) -> Model {
-    let c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
+    let mut c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
     match msg {
         Msg::GameOccurence(game, time) => Model {
             games: c
@@ -476,6 +512,14 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                     }
                 }).collect(),
         },
+        Msg::GameCreate(name) => {
+            let new_game = Game {
+                name: name,
+                events: vec![],
+            };
+            c.games.push(new_game);
+            c
+        }
     }
 }
 
