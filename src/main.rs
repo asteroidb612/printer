@@ -193,7 +193,7 @@ fn main() {
                     };
                 }
                 x => {
-                    print(format!("\n\nUnable to connect to Google: {:?} ", x));
+                    print(format!("Unable to connect to Google when looking for calendar {}: {:?}", calendar, x));
                 }
             };
         }
