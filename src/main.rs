@@ -201,17 +201,10 @@ fn main() {
                 }
             };
         }
-        let u = share_for_cron.lock().unwrap();
-        let t = u.games.to_vec();
-        match t.get(0) {
-            Some(x) => {
-                let consec = github_graph(&x);
-                //TODO Docs didn't mention to_vec()? why so many layers?
-                print(format!("Habits\n{}", consec));
-            }
-            None => print(format!("No games to log: {:?}", &u)),
+        let model = share_for_cron.lock().unwrap();
+        for game in model.games.iter() {
+           print(github_graph(&game)) 
         };
-
         print(format!("{}", string_from_items(all_events)));
     };
 
@@ -422,7 +415,7 @@ fn github_graph(g: &Game) -> String {
     while date.weekday() != Sun {
         date = date.pred()
     }
-    let mut output = String::from(format!("Game {}\n", &g.name));
+    let mut output = String::from(format!("Game /{}\n", &g.name));
     while date <= today {
         if date.weekday() == Sun {
             output.push_str("\n")
