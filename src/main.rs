@@ -168,7 +168,7 @@ fn main() {
             .checked_add_signed(OlderDuration::weeks(1))
             .expect("Time Overflow");
 
-        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io", "fb Calendar"];
+        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io"]; 
         let mut all_events = vec![];
 
         for calendar in calendars.iter() {
