@@ -281,7 +281,7 @@ fn main() {
                 };
                 Response::text(serialized)
             },
-            _ => {
+            (GET) ["/{name}", name: String] => {
                 let mut store = share_for_web_interface.lock().unwrap();
                 //I want a mutable borrow, not a move
                 // Can you pass a mutable borrow to functions?
@@ -301,7 +301,7 @@ fn main() {
                 // ONLY SOMETIMES!
                 // f
                 //https://stackoverflow.com/questions/51335679/where-is-a-mutexguard-if-i-never-assign-it-to-a-variable
-                *store = updated(&mut *store, Msg::GameOccurence(request.url(), Local::now()));
+                *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
 
                 let path = Path::new(STORAGE);
@@ -314,7 +314,9 @@ fn main() {
                     Ok(_) => ()
                 };
                 Response::text(serialized)
-            })
+            },
+            _ => Response::empty_404()
+         )
         });
     });
 
@@ -441,34 +443,17 @@ struct Event {
     when: chrono::DateTime<Local>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Game {
     name: String,
     //start: chrono::DateTime<Local>,
     //end: chrono::DateTime<Local>,
     events: Vec<Event>,
 }
-impl Default for Game {
-    fn default() -> Game {
-        //why the fuck am I repeating Game {...}
-        Game {
-            name: "/uke".to_string(),
-            events: vec![],
-        }
-    }
-}
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Model {
     games: Vec<Game>,
-}
-
-impl Default for Model {
-    fn default() -> Model {
-        Model {
-            games: vec![Default::default()],
-        }
-    }
 }
 
 enum Msg {
