@@ -47,7 +47,7 @@ static STORAGE: &str = "/data/store.json";
 static TOKEN_STORAGE: &str = "/data/token";
 
 #[cfg(target_os = "macos")]
-static PRINTER_PATH: &str = "./output";
+static PRINTER_PATH: &str = "/dev/stdout";
 #[cfg(target_os = "macos")]
 static PORT: &str = "0.0.0.0:8080";
 #[cfg(target_os = "macos")]
@@ -386,7 +386,7 @@ fn github_graph(g: &Game) -> String {
         date = date.pred()
     }
     let mut output = String::from(format!("Game {}\n", &g.name));
-    while date < today {
+    while date <= today {
         if date.weekday() == Sun {
             output.push_str("\n")
         }
