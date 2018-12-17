@@ -104,13 +104,12 @@ fn main() {
         token_storage,
         None,
     );
-    let hub = Arc::new(Mutex::new(CalendarHub::new(
+    let hub = CalendarHub::new(
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
             hyper_rustls::TlsClient::new(),
         )),
         auth,
-    )));
-    let hub2 = hub.clone(); //Appease borrow checking gods
+    );
 
     let mut cron = JobScheduler::new();
     let path = Path::new(STORAGE);
@@ -142,24 +141,6 @@ fn main() {
     let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
     let share_for_ynab = share_for_web_interface.clone();
 
-    let ping_server = || {
-        let now = Local::now();
-        let next_week = now
-            .clone()
-            .checked_add_signed(OlderDuration::weeks(1))
-            .expect("Time Overflow");
-
-        // You can configure optional parameters by calling the respective setters at will, and
-        // execute the final call using `doit()`.
-        let _result = hub
-            .lock()
-            .unwrap()
-            .events()
-            .list(&"dlazzeri1@gmail.com")
-            .time_min(&now.to_rfc3339())
-            .time_max(&next_week.to_rfc3339())
-            .doit();
-    };
 
     let print_next_five_days = move || {
         println!("print_next_five_days");
@@ -173,9 +154,7 @@ fn main() {
         let mut all_events = vec![];
 
         for calendar in calendars.iter() {
-            let result = hub2
-                .lock()
-                .unwrap()
+            let result = hub
                 .events()
                 .list(&calendar)
                 .single_events(true)
@@ -203,10 +182,10 @@ fn main() {
             };
         }
         let model = share_for_cron.lock().unwrap();
+        print(format!("{}", view_from_items(all_events)));
         for game in model.games.iter() {
            print(github_graph(&game)) 
         };
-        print(format!("{}", view_from_items(all_events)));
     };
 
     let _check_ynab_api =
@@ -314,9 +293,7 @@ fn main() {
         });
     });
 
-    ping_server();
     print_next_five_days();
-    cron.add(Job::new("0 30 * * * *".parse().unwrap(), ping_server));
     cron.add(Job::new(
         "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
         print_next_five_days,
