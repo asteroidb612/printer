@@ -83,7 +83,7 @@ fn secret() -> oauth2::ApplicationSecret {
     secret
 }
 
-fn main() {
+fn setup() {
     if cfg!(target_os = "linux") {
         let mut port = serial::open(Path::new("/dev/serial0")).expect("Couldn't open /dev/serial0");
         port.reconfigure(&mut |settings| settings.set_baud_rate(serial::Baud19200))
@@ -91,6 +91,10 @@ fn main() {
         port.write("Fuck Accordions".as_bytes())
             .expect("Couldn't write to serial port");
     }
+}
+
+fn main() {
+    setup();
     print(String::from("It's working... It's working!"));
 
     let token_storage =
@@ -141,7 +145,6 @@ fn main() {
     let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
     let share_for_ynab = share_for_web_interface.clone();
 
-
     let print_next_five_days = move || {
         println!("print_next_five_days");
         let now = Local::now();
@@ -183,9 +186,12 @@ fn main() {
         }
         let model = share_for_cron.lock().unwrap();
         print(format!("{}", view_from_items(all_events)));
-        for game in model.games.iter() {
-           print(github_graph(&game)) 
-        };
+        for game in model.games.iter().sorted_by(|a, b| Ord::cmp(&b.start, &a.start)) {
+            print(github_graph(&game));
+            if consecutive_days(game) < 7 {
+                break
+            }
+        }
     };
 
     let _check_ynab_api =
@@ -238,9 +244,11 @@ fn main() {
                      None => Response::empty_404()
                  }
             },
-            (POST) ["/games/{name}", name:String] => {
+            (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
                 let mut store = share_for_web_interface.lock().unwrap();
-                *store = updated(&mut *store, Msg::GameCreate(name));
+                let start = Local::now();
+                let end = (&start) .checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
+                *store = updated(&mut *store, Msg::GameCreate(name, start, end));
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
 
                 let path = Path::new(STORAGE);
@@ -306,7 +314,6 @@ fn main() {
     }
 }
 
-
 fn view_from_items(items: Vec<calendar3::Event>) -> View {
     let mut view = "".to_string();
 
@@ -359,71 +366,53 @@ fn weekday_name(w: Weekday) -> std::string::String {
     name.to_owned()
 }
 
-fn _consecutive_days(v: Vec<DateTime<Local>>) -> i32 {
-    let dates = v.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
-    let mut max = 0;
-    let dates2 = dates.clone(); //Eww
-    for date in dates.into_iter() {
-        let mut d = date.pred();
-        let mut tmp = 1;
-        while dates2.contains(&d) {
-            d = d.pred();
-            tmp = tmp + 1;
-        }
-        if max < tmp {
-            max = tmp;
-        }
-    }
-    max
-}
-
-
 fn github_graph(g: &Game) -> View {
-    let dates = &g
-        .events
-        .iter()
-        .map(|l| DateTime::date(&l.when))
-        .collect::<Vec<Date<Local>>>();
-    let today = Local::now().date();
-    let min = match dates.iter().min() {
-        Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
-        None => {
-            return String::from("No Dates For Game So Far");
+    let now = Local::now();
+    if now < g.end && now > g.start {
+        let dates = &g
+            .events
+            .iter()
+            .map(DateTime::date)
+            .collect::<Vec<Date<Local>>>();
+        let today = now.date();
+        let mut day_pointer = match dates.iter().min() {
+            Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
+            None => {
+                return String::from("No Dates For Game So Far");
+            }
+        };
+        while day_pointer.weekday() != Sun {
+            //Backup to sunday before game starts
+            day_pointer = day_pointer.pred()
         }
-    };
-    let mut date = min.clone();
-    while date.weekday() != Sun {
-        date = date.pred()
+        let mut output = String::from(format!("Game /{}\n", &g.name));
+        while day_pointer <= today {
+            //Walk through days till today
+            if day_pointer.weekday() == Sun {
+                output.push_str("\n")
+            }
+            if dates.contains(&day_pointer) {
+                output.push_str("X");
+            } else {
+                output.push_str("_");
+            }
+            day_pointer = day_pointer.succ()
+        }
+        format!("\n{}\n", output)
+    } else {
+        "".to_string()
     }
-    let mut output = String::from(format!("Game /{}\n", &g.name));
-    while date <= today {
-        if date.weekday() == Sun {
-            output.push_str("\n")
-        }
-        if dates.contains(&date) {
-            output.push_str("X");
-        } else {
-            output.push_str("_");
-        }
-        date = date.succ()
-    }
-    format!("\n{}\n", output)
 }
 
 type View = std::string::String;
+type Time = chrono::DateTime<Local>;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Event {
-    what: String,
-    when: chrono::DateTime<Local>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Game {
     name: String,
-    //start: chrono::DateTime<Local>,
-    //end: chrono::DateTime<Local>,
-    events: Vec<Event>,
+    start: Time,
+    end: Time,
+    events: Vec<Time>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -432,8 +421,8 @@ struct Model {
 }
 
 enum Msg {
-    GameOccurence(String, chrono::DateTime<Local>),
-    GameCreate(String),
+    GameOccurence(String, Time),
+    GameCreate(String, Time, Time), //TODO Should this message just carry a game?
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -454,6 +443,7 @@ struct Transaction {
 
 fn updated(model: &mut Model, msg: Msg) -> Model {
     let mut c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
+    let now = Local::now();
     match msg {
         Msg::GameOccurence(game, time) => Model {
             games: c
@@ -461,20 +451,19 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                 .into_iter()
                 .map(|mut stored_game| {
                     println!("{:?} stored, {:?} sent", stored_game, game);
-                    if stored_game.name == game {
-                        stored_game.events.push(Event {
-                            what: game.clone(),
-                            when: time,
-                        });
+                    if stored_game.name == game && stored_game.end > now {
+                        stored_game.events.push(time);
                         stored_game //Hey that's not immutable... maybe I miss conslists
                     } else {
                         stored_game
                     }
                 }).collect(),
         },
-        Msg::GameCreate(name) => {
+        Msg::GameCreate(name, start, end) => {
             let new_game = Game {
                 name: name,
+                start: start,
+                end: end,
                 events: vec![],
             };
             c.games.push(new_game);
@@ -491,4 +480,21 @@ impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
             pi.user_code, pi.verification_url
         ))
     }
+}
+
+fn consecutive_days(g: &Game) -> i32 {
+    let dates = g.events.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+    let mut max = 0;
+    for date in (&dates).into_iter() {
+        let mut previous = date.pred();
+        let mut days = 1;
+        while (&dates).contains(&previous) {
+            previous = previous.pred();
+            days = days + 1;
+        }
+        if max < days {
+            max = days;
+        }
+    }
+    max
 }
