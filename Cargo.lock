@@ -616,6 +616,7 @@ dependencies = [
 name = "lumberjack"
 version = "0.1.0"
 dependencies = [
+ "cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "gag 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "google-calendar3 1.0.5+20170514 (registry+https://github.com/rust-lang/crates.io-index)",

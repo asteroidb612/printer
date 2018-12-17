@@ -14,6 +14,8 @@ extern crate yup_oauth2 as oauth2;
 extern crate serde_derive;
 #[macro_use]
 extern crate rouille;
+#[macro_use]
+extern crate cfg_if;
 
 use calendar3::CalendarHub;
 use chrono::offset::*;
@@ -37,23 +39,19 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-#[cfg(target_os = "linux")]
-static PRINTER_PATH: &str = "/dev/serial0";
-#[cfg(target_os = "linux")]
-static PORT: &str = "0.0.0.0:80";
-#[cfg(target_os = "linux")]
-static STORAGE: &str = "/data/store.json";
-#[cfg(target_os = "linux")]
-static TOKEN_STORAGE: &str = "/data/token";
-
-#[cfg(target_os = "macos")]
-static PRINTER_PATH: &str = "/dev/stdout";
-#[cfg(target_os = "macos")]
-static PORT: &str = "0.0.0.0:8080";
-#[cfg(target_os = "macos")]
-static STORAGE: &str = "store.json";
-#[cfg(target_os = "macos")]
-static TOKEN_STORAGE: &str = "token";
+cfg_if! {
+  if #[cfg(target_os = "macos")] {
+    static PRINTER_PATH: &str = "/dev/stdout";
+    static PORT: &str = "0.0.0.0:8080";
+    static STORAGE: &str = "store.json";
+    static TOKEN_STORAGE: &str = "token";
+  } else {
+    static PRINTER_PATH: &str = "/dev/serial0";
+    static PORT: &str = "0.0.0.0:80";
+    static STORAGE: &str = "/data/store.json";
+    static TOKEN_STORAGE: &str = "/data/token";
+  }
+}
 
 fn print(s: String) {
     let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
@@ -186,10 +184,14 @@ fn main() {
         }
         let model = share_for_cron.lock().unwrap();
         print(format!("{}", view_from_items(all_events)));
-        for game in model.games.iter().sorted_by(|a, b| Ord::cmp(&b.start, &a.start)) {
+        for game in model
+            .games
+            .iter()
+            .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
+        {
             print(github_graph(&game));
             if consecutive_days(game) < 7 {
-                break
+                break;
             }
         }
     };
@@ -483,7 +485,11 @@ impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
 }
 
 fn consecutive_days(g: &Game) -> i32 {
-    let dates = g.events.iter().map(DateTime::date).collect::<Vec<Date<Local>>>();
+    let dates = g
+        .events
+        .iter()
+        .map(DateTime::date)
+        .collect::<Vec<Date<Local>>>();
     let mut max = 0;
     for date in (&dates).into_iter() {
         let mut previous = date.pred();
