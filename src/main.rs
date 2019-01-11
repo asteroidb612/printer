@@ -349,7 +349,7 @@ fn main() {
         print_next_five_days,
     ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
-    cron.add(Job::new("0 0,30 0 0 0 0".parse().unwrap(), update_meta_game));
+    cron.add(Job::new("0 0,30 * * * *".parse().unwrap(), update_meta_game));
     loop {
         cron.tick();
 
