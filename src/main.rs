@@ -139,9 +139,10 @@ fn main() {
             }
         }
     };
-    let share_for_web_interface = Arc::new(Mutex::new(model)); //I guess haveing two of these means moving's fine
-    let share_for_cron = share_for_web_interface.clone(); //What are memory implications of a move?
+    let share_for_web_interface = Arc::new(Mutex::new(model)); //What are memory implications of a move?
+    let share_for_cron = share_for_web_interface.clone(); 
     let share_for_ynab = share_for_web_interface.clone();
+    let share_for_meta_game = share_for_web_interface.clone();
 
     let print_next_five_days = move || {
         println!("print_next_five_days");
@@ -182,16 +183,19 @@ fn main() {
                 }
             };
         }
-        let model = share_for_cron.lock().unwrap();
+        let share = share_for_cron.lock().unwrap();
         print(format!("{}", view_from_items(all_events)));
-        for game in model
+        for game in share
             .games
             .iter()
             .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
         {
-            print(github_graph(&game));
-            if consecutive_days(game) < 7 {
-                break;
+            if game.name == "bedtime and tea" {
+                print(github_graph(&game));
+                // Gradually layering games isn't thought through yet
+                //if consecutive_days(game) < 7 {
+                //    break;
+                //}
             }
         }
     };
@@ -215,12 +219,48 @@ fn main() {
                 }
             }) {
                 let mut model = share_for_ynab.lock().expect("Couldn't unlock YNAB share");
-                *model = updated(
+                 *model = updated(
                     &mut *model,
                     Msg::GameOccurence("ynab".to_owned(), Local::now()),
                 );
-            }
+           }
         };
+
+    let update_meta_game = move || {
+        //If evening and morning and tea then bedtime and tea
+        let mut model = share_for_meta_game.lock().expect("Couldn't unlock meta share");
+        let mut tea = false;
+        let mut morning = false;
+        let mut evening = false;
+
+        let today = Local::now().date();
+        //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
+        let games = model.games.clone(); 
+        for game in games {
+            let game_from_today = match game.events.into_iter().last() {
+                Some(last_game) => last_game.date() == today,
+                None => false
+            };
+            if game_from_today {
+                if game.name == "morning" {
+                    morning = true;
+                }
+                if game.name == "tea" {
+                    tea = true;
+                }
+                if game.name == "evening" {
+                    evening = true;
+                }
+            }
+        }
+
+        if tea && morning && evening {
+            *model = updated(
+                &mut *model,
+                Msg::GameOccurence("bedtime and tea".to_owned(), Local::now()),
+                );
+        }
+    };
 
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
@@ -249,7 +289,7 @@ fn main() {
             (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
                 let mut store = share_for_web_interface.lock().unwrap();
                 let start = Local::now();
-                let end = (&start) .checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
+                let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
                 *store = updated(&mut *store, Msg::GameCreate(name, start, end));
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
 
@@ -309,6 +349,7 @@ fn main() {
         print_next_five_days,
     ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
+    cron.add(Job::new("0 0,30 0 0 0 0".parse().unwrap(), update_meta_game));
     loop {
         cron.tick();
 
@@ -484,7 +525,7 @@ impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
     }
 }
 
-fn consecutive_days(g: &Game) -> i32 {
+fn _consecutive_days(g: &Game) -> i32 {
     let dates = g
         .events
         .iter()
