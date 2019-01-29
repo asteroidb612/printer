@@ -325,6 +325,7 @@ fn main() {
                 // f
                 //https://stackoverflow.com/questions/51335679/where-is-a-mutexguard-if-i-never-assign-it-to-a-variable
                 *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
+                update_meta_game();
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
 
                 let path = Path::new(STORAGE);
@@ -349,7 +350,7 @@ fn main() {
         print_next_five_days,
     ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
-    cron.add(Job::new("0 0,30 * * * *".parse().unwrap(), update_meta_game));
+    //    cron.add(Job::new("0 0,30 * * * *".parse().unwrap(), update_meta_game));
     loop {
         cron.tick();
 
