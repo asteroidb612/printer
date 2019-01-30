@@ -6,7 +6,6 @@ FROM resin/%%RESIN_MACHINE_NAME%%-debian as base
 
 ENV INITSYSTEM=on
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TIMEZONE=US/Pacific
 ################################################################################
 # Rust image
 ################################################################################
@@ -90,8 +89,10 @@ COPY --from=builder /build/app/target/release/lumberjack .
 # Copy other folders required by the application. Example:
 # COPY --from=builder /build/app/assets assets
 COPY site/index.html ./site/index.html
-CMD echo "${TIMEZONE}" > /etc/timezone
+CMD cat /etc/timezone
+CMD echo "America/Los_Angeles" > /etc/timezone
 CMD dpkg-reconfigure tzdata
+CMD cat /etc/timezone
 
 # Launch application
 CMD ["./lumberjack"]
