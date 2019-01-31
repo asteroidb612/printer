@@ -411,14 +411,20 @@ fn weekday_name(w: Weekday) -> std::string::String {
 }
 
 fn github_graph(g: &Game) -> View {
+    /* Balena has the server always in UTC time
+     * It doesn't really matter what timezone the stamps are store in.
+     * If we want accurate printing through, we want the days to line up with CA, 
+     * I'll have to change this come daylights savings time
+     * */
     let now = Local::now();
+    let california =  FixedOffset::west(7 * 3600);
     if now < g.end && now > g.start {
         let dates = &g
             .events
             .iter()
-            .map(DateTime::date)
-            .collect::<Vec<Date<Local>>>();
-        let today = now.date();
+            .map(|d| d.with_timezone(&california).date())
+            .collect::<Vec<Date<FixedOffset>>>();
+        let today = now.with_timezone(&california).date();
         let mut day_pointer = match dates.iter().min() {
             Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
             None => {
