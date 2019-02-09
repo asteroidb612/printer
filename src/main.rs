@@ -179,7 +179,7 @@ fn main() {
                     print(format!(
                         "Unable to connect to Google when looking for calendar {}: {:?}",
                         calendar, x
-                    ));
+                    )); //Sometimes this has meant that the printer was off for a while and had to renegotiate keys
                 }
             };
         }
