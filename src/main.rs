@@ -234,6 +234,7 @@ fn main() {
         let mut evening = false;
 
         let today = Local::now().date();
+        let weekday = today.weekday();
         //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
         let games = model.games.clone(); 
         for game in games {
@@ -242,13 +243,13 @@ fn main() {
                 None => false
             };
             if game_from_today {
-                if game.name == "morning" {
+                if game.name == "morning" || weekday == Sat || weekday == Sun{
                     morning = true;
                 }
                 if game.name == "tea" {
                     tea = true;
                 }
-                if game.name == "evening" {
+                if game.name == "evening" || weekday == Fri || weekday == Sat{
                     evening = true;
                 }
             }
