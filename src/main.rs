@@ -10,7 +10,7 @@ extern crate serde_json;
 extern crate serial;
 extern crate yup_oauth2 as oauth2;
 
-#[macro_use]
+ #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate rouille;
@@ -243,6 +243,10 @@ fn main() {
                 None => false
             };
             if game_from_today {
+                //This 's a workaround for some rust data difficulties I've yet to grock
+                if game.name == "bedtime and tea" {
+                    return
+                }
                 if game.name == "morning" || weekday == Sat || weekday == Sun{
                     morning = true;
                 }
@@ -304,6 +308,18 @@ fn main() {
                     Ok(_) => ()
                 };
                 Response::text(serialized)
+            },
+            (POST) ["/backup_game_file"] => {
+                let backup_name = format!("backup {} store.json", Local::now().timestamp());
+                std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
+
+                let path = Path::new(&backup_name);
+                let mut file = File::open(&path).expect("Copying backup worked, but we can't open it (?)");
+                let mut s = String::new();
+                match file.read_to_string(&mut s) {
+                    Err(_why) => Response::empty_404(),
+                    Ok (_) => Response::text(s)
+                }
             },
             (GET) ["/{name}", name: String] => {
                 let mut store = share_for_web_interface.lock().unwrap();
