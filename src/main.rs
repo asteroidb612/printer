@@ -309,17 +309,26 @@ fn main() {
                 };
                 Response::text(serialized)
             },
-            (POST) ["/backup_game_file"] => {
-                let backup_name = format!("backup {} store.json", Local::now().timestamp());
+            (POST) ["/overwrite_game_file"] => {
+                let new_model: Model  = try_or_400!(rouille::input::json_input(request));
+                let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
                 std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
 
-                let path = Path::new(&backup_name);
-                let mut file = File::open(&path).expect("Copying backup worked, but we can't open it (?)");
-                let mut s = String::new();
-                match file.read_to_string(&mut s) {
-                    Err(_why) => Response::empty_404(),
-                    Ok (_) => Response::text(s)
-                }
+                let serialized = serde_json::to_string(&new_model).unwrap();
+                let path = Path::new(STORAGE);
+                let mut file = match File::create(path) {
+                    Err(_) => panic!("couldn't create file for server storage"),
+                    Ok(file) => file
+                };
+                match file.write_all(serialized.as_bytes()) {
+                    Err(_) => panic!("server couldn't write store to file"),
+                    Ok(_) => ()
+                };
+                Response::text(serialized)
+            },
+            (GET) ["/read_game_file"] => {
+                let file = File::open(STORAGE).unwrap();
+                Response::from_file("text/html; charset=utf8", file)
             },
             (GET) ["/{name}", name: String] => {
                 let mut store = share_for_web_interface.lock().unwrap();
