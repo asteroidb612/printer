@@ -425,6 +425,7 @@ fn github_graph(g: &Game) -> View {
             .map(|d| d.with_timezone(&california).date())
             .collect::<Vec<Date<FixedOffset>>>();
         let today = now.with_timezone(&california).date();
+        let last_day = g.start.with_timezone(&california).date();
         let mut day_pointer = match dates.iter().min() {
             Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
             None => {
@@ -436,13 +437,15 @@ fn github_graph(g: &Game) -> View {
             day_pointer = day_pointer.pred()
         }
         let mut output = String::from(format!("Game /{}\n", &g.name));
-        while day_pointer <= today {
+        while day_pointer <= last_day{
             //Walk through days till today
             if day_pointer.weekday() == Sun {
                 output.push_str("\n")
             }
             if dates.contains(&day_pointer) {
                 output.push_str("X");
+            } else if day_pointer == today {
+                output.push_str("O");
             } else {
                 output.push_str("_");
             }
