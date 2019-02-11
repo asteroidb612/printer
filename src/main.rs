@@ -38,6 +38,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use std::sync::mpsc;
 
 cfg_if! {
   if #[cfg(target_os = "macos")] {
@@ -143,6 +144,7 @@ fn main() {
     let share_for_cron = share_for_web_interface.clone(); 
     let share_for_ynab = share_for_web_interface.clone();
     let share_for_meta_game = share_for_web_interface.clone();
+
 
     let print_next_five_days = move || {
         println!("print_next_five_days");
@@ -267,6 +269,11 @@ fn main() {
         }
     };
 
+    //Set up a channel for a request thread to tell the main thread to print_next_five_days()
+    let (tx, rx) = mpsc::channel();
+    let for_web_proc = Arc::new(Mutex::new(tx));
+    let another = for_web_proc.clone();
+
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
         rouille::start_server(PORT, move |request| {
@@ -330,6 +337,11 @@ fn main() {
                 let file = File::open(STORAGE).unwrap();
                 Response::from_file("text/html; charset=utf8", file)
             },
+            (GET) ["/print"] => {
+                let tx1 = for_web_proc.lock().unwrap();
+                tx1.send(String::from("please print now")).unwrap();
+                Response::text("Okay".to_owned()) 
+            },
             (GET) ["/{name}", name: String] => {
                 let mut store = share_for_web_interface.lock().unwrap();
                 //I want a mutable borrow, not a move
@@ -373,12 +385,17 @@ fn main() {
     print_next_five_days();
     cron.add(Job::new(
         "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
-        print_next_five_days,
+        move || {
+            let tx1 = another.lock().unwrap();
+            tx1.send(String::from("please print now")).unwrap();
+        }
     ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
-    //    cron.add(Job::new("0 0,30 * * * *".parse().unwrap(), update_meta_game));
     loop {
         cron.tick();
+        if let Ok(_) = rx.try_recv() {
+            print_next_five_days();
+        }
 
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -529,7 +546,6 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                 .games
                 .into_iter()
                 .map(|mut stored_game| {
-                    println!("{:?} stored, {:?} sent", stored_game, game);
                     if stored_game.name == game && stored_game.end > now {
                         stored_game.events.push(time);
                         stored_game //Hey that's not immutable... maybe I miss conslists
