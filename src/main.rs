@@ -277,6 +277,7 @@ fn main() {
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
         rouille::start_server(PORT, move |request| {
+            print!("request {:?}", request);
             router!(request,
             (GET) ["/"] => {
                 let file = File::open("site/index.html").unwrap();
@@ -382,7 +383,7 @@ fn main() {
         });
     });
 
-    print_next_five_days();
+    print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
     cron.add(Job::new(
         "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
         move || {
@@ -460,7 +461,7 @@ fn github_graph(g: &Game) -> View {
      * I'll have to change this come daylights savings time
      * */
     let now = Local::now();
-    let california =  FixedOffset::west(7 * 3600);
+    let california =  FixedOffset::west(8 * 3600); //TODO Fix for daylight savings
     if now < g.end && now > g.start {
         let dates = &g
             .events
