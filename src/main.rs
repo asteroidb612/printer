@@ -30,6 +30,7 @@ use oauth2::{
     DiskTokenStorage, PollInformation,
 };
 use rouille::Response;
+use rouille::Server;
 use serial::prelude::*;
 use std::default::Default;
 use std::env::var;
@@ -230,7 +231,10 @@ fn main() {
 
     let update_meta_game = move || {
         //If evening and morning and tea then bedtime and tea
+
         let mut model = share_for_meta_game.lock().expect("Couldn't unlock meta share");
+        //We're blocking until we get the model but the thread has the model so we're deadlocked!
+
         let mut tea = false;
         let mut morning = false;
         let mut evening = false;
@@ -239,6 +243,7 @@ fn main() {
         let weekday = today.weekday();
         //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
         let games = model.games.clone(); 
+
         for game in games {
             let game_from_today = match game.events.into_iter().last() {
                 Some(last_game) => last_game.date() == today,
@@ -276,8 +281,7 @@ fn main() {
 
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
-        rouille::start_server(PORT, move |request| {
-            print!("request {:?}", request);
+        let server = Server::new(PORT, move |request| {
             router!(request,
             (GET) ["/"] => {
                 let file = File::open("site/index.html").unwrap();
@@ -344,28 +348,30 @@ fn main() {
                 Response::text("Okay".to_owned()) 
             },
             (GET) ["/{name}", name: String] => {
-                let mut store = share_for_web_interface.lock().unwrap();
-                //I want a mutable borrow, not a move
-                // Can you pass a mutable borrow to functions?
-                // Can you set an immutable borrow?
-                // What IIIS dereferencing?
-                // Is it just taking the shells of of types?
-                // Is each layer maybe borrowed, maybe owned?
-                // How do I write to a layer? mutating the layer above?
-                // &(this) is a place expression. So any place can go there.
-                // &(functionCall) is using a temporary, implicit let expression to store functionCall then make the borrow
-                // *dereference ALWAYS implicitly borrows!
-                // So it never moves
-                // So we could tell it to borrow mut or not
-                // *share.lock().unwrap() -> *&share.lock().unwrap() -> let &x = &share.lock().unwrap(); *&x
-                // Wtf is the place in a place_expression for a borrow? in this article's first example?
-                //* -> & -> let
-                // ONLY SOMETIMES!
-                // f
-                //https://stackoverflow.com/questions/51335679/where-is-a-mutexguard-if-i-never-assign-it-to-a-variable
-                *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
+                let mut serialized ;
+                {
+                    let mut store = share_for_web_interface.lock().unwrap();
+                    //I want a mutable borrow, not a move
+                    // Can you pass a mutable borrow to functions?
+                    // Can you set an immutable borrow?
+                    // What IIIS dereferencing?
+                    // Is it just taking the shells of of types?
+                    // Is each layer maybe borrowed, maybe owned?
+                    // How do I write to a layer? mutating the layer above?
+                    // &(this) is a place expression. So any place can go there.
+                    // &(functionCall) is using a temporary, implicit let expression to store functionCall then make the borrow
+                    // *dereference ALWAYS implicitly borrows!
+                    // So it never moves
+                    // So we could tell it to borrow mut or not
+                    // *share.lock().unwrap() -> *&share.lock().unwrap() -> let &x = &share.lock().unwrap(); *&x
+                    // Wtf is the place in a place_expression for a borrow? in this article's first example?
+                    //* -> & -> let
+                    // ONLY SOMETIMES!
+                    // f
+                    *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
+                    serialized = serde_json::to_string(&store.clone()).unwrap();
+                }
                 update_meta_game();
-                let serialized = serde_json::to_string(&store.clone()).unwrap();
 
                 let path = Path::new(STORAGE);
                 let mut file = match File::create(path) {
@@ -376,11 +382,14 @@ fn main() {
                     Err(_) => panic!("server couldn't write store to file"),
                     Ok(_) => ()
                 };
+
                 Response::text(serialized)
             },
             _ => Response::empty_404()
          )
-        });
+        }).expect("Unable to start web server");
+        server.run();
+        print("The server stopped running!".to_owned());
     });
 
     print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
