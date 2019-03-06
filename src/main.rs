@@ -439,12 +439,10 @@ fn view_from_items(items: Vec<calendar3::Event>) -> View {
             (when, summary)
         }).sorted_by_key(|t| t.0); //And sort
 
-    for (key, group) in &sorted_events.iter().group_by(|t| t.0.date().weekday()) {
-        view.push_str(&format!("{}:\n", weekday_name(key)));
+    for (key, group) in &sorted_events.iter().group_by(|t| t.0.date()) {
+        view.push_str(&format!("{}{}:\n", weekday_name(key.weekday()), key.format("%e")));
         for event in group.into_iter() {
-            //TODO Print time for each event
-            //TODO get all-day tasks in line with the day^
-            view.push_str(&format!("  {}\n", &event.1));
+            view.push_str(&format!("  {} {}\n", &event.0.time().format("%H:%M").to_string(), &event.1));
         }
     }
     view
