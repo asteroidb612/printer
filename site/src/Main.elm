@@ -20,9 +20,9 @@ main =
         }
 
 
-init : () -> ( Model, Cmd msg )
+init : () -> ( Model, Cmd Msg )
 init flags =
-    ( { games = Nothing }, Cmd.none )
+    ( { games = Nothing }, fetchGames )
 
 
 type alias Game =
@@ -44,12 +44,13 @@ view model =
     }
 
 
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         GotGames result ->
-            case result of
+            case Debug.log "result" result of
                 Ok games ->
-                    ( { model | games = Just games }, Cmd.none )
+                    ( { model | games = Just (Debug.log "games" games) }, Cmd.none )
 
                 _ ->
                     Debug.todo "What should I do if I can't parse games from the server?"
@@ -58,10 +59,11 @@ update msg model =
             ( model, fetchGames )
 
 
+fetchGames : Cmd Msg
 fetchGames =
     Http.get
-        { url = "https://de46adb5aefddd002ff3c4227d43b588.balena-devices.com/read_game_file"
-        , expect = Http.expectJson GotGames (D.list decodeGame)
+        { url = "/read_game_file"
+        , expect = Http.expectJson GotGames (D.field "games" (D.list decodeGame))
         }
 
 
