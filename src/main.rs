@@ -193,7 +193,7 @@ fn main() {
             .iter()
             .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
         {
-            if game.name == "bedtime and tea" {
+            if game.name == "Game Two" {
                 print(github_graph(&game));
                 // Gradually layering games isn't thought through yet
                 //if consecutive_days(game) < 7 {
@@ -230,14 +230,14 @@ fn main() {
         };
 
     let update_meta_game = move || {
-        //If evening and morning and tea then bedtime and tea
-
         let mut model = share_for_meta_game.lock().expect("Couldn't unlock meta share");
         //We're blocking until we get the model but the thread has the model so we're deadlocked!
 
-        let mut tea = false;
-        let mut morning = false;
-        let mut evening = false;
+        let mut work_on_time = false;
+        let mut sleep_on_time = false;
+        let mut clenches = false;
+        let mut picks = false;
+        let mut played_20 = false;
 
         let today = Local::now().date();
         let weekday = today.weekday();
@@ -251,25 +251,31 @@ fn main() {
             };
             if game_from_today {
                 //This 's a workaround for some rust data difficulties I've yet to grock
-                if game.name == "bedtime and tea" {
+                if game.name == "Game Two" {
                     return
                 }
-                if game.name == "morning" || weekday == Sat || weekday == Sun{
-                    morning = true;
+                if game.name == "work on time" || weekday == Sat || weekday == Sun {
+                    work_on_time = true;
                 }
-                if game.name == "tea" {
-                    tea = true;
+                if game.name == "sleep on time" || weekday == Sat || weekday == Fri {
+                    sleep_on_time = true;
                 }
-                if game.name == "evening" || weekday == Fri || weekday == Sat{
-                    evening = true;
+                if game.name == "no clenches" {
+                    clenches = true; 
+                }
+                if game.name == "no picks" {
+                    picks = true;
+                }
+                if game.name == "played 20" {
+                    played_20 = true;
                 }
             }
         }
 
-        if tea && morning && evening {
+        if work_on_time && sleep_on_time && !clenches && !picks && played_20 {
             *model = updated(
                 &mut *model,
-                Msg::GameOccurence("bedtime and tea".to_owned(), Local::now()),
+                Msg::GameOccurence("Game Two".to_owned(), Local::now()),
                 );
         }
     };
@@ -285,8 +291,7 @@ fn main() {
             router!(request,
             (GET) ["/"] => {
                 let file = File::open("site/index.html").unwrap();
-                Response::from_file("text/html; charset=utf8", file)
-            },
+                Response::from_file("text/html; charset=utf8", file) },
             (GET) ["/games"] => {
                 let store = share_for_web_interface.lock().unwrap();
                 let serialized = serde_json::to_string(&store.clone()).unwrap();
@@ -517,7 +522,6 @@ struct Game {
     start: Time,
     end: Time,
     events: Vec<Time>,
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
