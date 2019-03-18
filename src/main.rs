@@ -468,7 +468,7 @@ fn github_graph(g: &Game) -> View {
      * I'll have to change this come daylights savings time
      * */
     let now = Local::now();
-    let california =  FixedOffset::west(8 * 3600); //TODO Fix for daylight savings
+    let california =  FixedOffset::west(7 * 3600); //TODO Fix for daylight savings
     if now < g.end && now > g.start {
         let dates = &g
             .events
@@ -517,11 +517,22 @@ struct Game {
     start: Time,
     end: Time,
     events: Vec<Time>,
+
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Meta {
+    name: String,
+    start: Time,
+    end: Time,
+    all: Vec<String>,
+    none: Vec<String>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Model {
     games: Vec<Game>,
+    metas: Option<Vec<Meta>>
 }
 
 enum Msg {
@@ -561,6 +572,7 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                         stored_game
                     }
                 }).collect(),
+            metas: None
         },
         Msg::GameCreate(name, start, end) => {
             let new_game = Game {
