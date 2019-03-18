@@ -487,9 +487,7 @@ fn github_graph(g: &Game) -> View {
         let last_day = g.end.with_timezone(&california).date();
         let mut day_pointer = match dates.iter().min() {
             Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
-            None => {
-                return String::from("No Dates For Game So Far");
-            }
+            None => g.start.clone().with_timezone(&california()).date()
         };
         while day_pointer.weekday() != Sun {
             //Backup to sunday before game starts
