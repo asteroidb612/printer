@@ -193,7 +193,7 @@ fn main() {
                 .iter()
                 .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
                 {
-                    if game.name == "Game Two" {
+                    if game.name == "Game_Two" {
                         print(github_graph(&game));
                         // Gradually layering games isn't thought through yet
                         //if consecutive_days(game) < 7 {
@@ -251,22 +251,22 @@ fn main() {
             };
             if game_from_today {
                 //This 's a workaround for some rust data difficulties I've yet to grock
-                if game.name == "Game Two" {
+                if game.name == "Game_Two" {
                     return
                 }
-                if game.name == "work on time" || weekday == Sat || weekday == Sun {
+                if game.name == "work_on_time" || weekday == Sat || weekday == Sun {
                     work_on_time = true;
                 }
-                if game.name == "sleep on time" || weekday == Sat || weekday == Fri {
+                if game.name == "sleep_on_time" || weekday == Sat || weekday == Fri {
                     sleep_on_time = true;
                 }
-                if game.name == "no clenches" {
+                if game.name == "no_clenches" {
                     clenches = true; 
                 }
-                if game.name == "no picks" {
+                if game.name == "no_picks" {
                     picks = true;
                 }
-                if game.name == "played 20" {
+                if game.name == "played_20" {
                     played_20 = true;
                 }
             }
@@ -275,7 +275,7 @@ fn main() {
         if work_on_time && sleep_on_time && !clenches && !picks && played_20 {
             *model = updated(
                 &mut *model,
-                Msg::GameOccurence("Game Two".to_owned(), Local::now()),
+                Msg::GameOccurence("Game_Two".to_owned(), Local::now()),
                 );
         }
     };
