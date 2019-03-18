@@ -10,7 +10,7 @@ extern crate serde_json;
 extern crate serial;
 extern crate yup_oauth2 as oauth2;
 
- #[macro_use]
+#[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate rouille;
@@ -29,8 +29,7 @@ use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, AuthenticatorDelegate,
     DiskTokenStorage, PollInformation,
 };
-use rouille::Response;
-use rouille::Server;
+use rouille::{Response, Server, log};
 use serial::prelude::*;
 use std::default::Default;
 use std::env::var;
@@ -40,19 +39,20 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::sync::mpsc;
+use std::io;
 
 cfg_if! {
-  if #[cfg(target_os = "macos")] {
-    static PRINTER_PATH: &str = "/dev/stdout";
-    static PORT: &str = "0.0.0.0:8080";
-    static STORAGE: &str = "store.json";
-    static TOKEN_STORAGE: &str = "token";
-  } else {
-    static PRINTER_PATH: &str = "/dev/serial0";
-    static PORT: &str = "0.0.0.0:80";
-    static STORAGE: &str = "/data/store.json";
-    static TOKEN_STORAGE: &str = "/data/token";
-  }
+    if #[cfg(target_os = "macos")] {
+        static PRINTER_PATH: &str = "/dev/stdout";
+        static PORT: &str = "0.0.0.0:8080";
+        static STORAGE: &str = "store.json";
+        static TOKEN_STORAGE: &str = "token";
+    } else {
+        static PRINTER_PATH: &str = "/dev/serial0";
+        static PORT: &str = "0.0.0.0:80";
+        static STORAGE: &str = "/data/store.json";
+        static TOKEN_STORAGE: &str = "/data/token";
+    }
 }
 
 fn print(s: String) {
@@ -103,17 +103,17 @@ fn main() {
         &secret(),
         PrinterAuthenticatorDelegate,
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-            hyper_rustls::TlsClient::new(),
-        )),
-        token_storage,
-        None,
-    );
+                hyper_rustls::TlsClient::new(),
+                )),
+                token_storage,
+                None,
+                );
     let hub = CalendarHub::new(
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-            hyper_rustls::TlsClient::new(),
-        )),
-        auth,
-    );
+                hyper_rustls::TlsClient::new(),
+                )),
+                auth,
+                );
 
     let mut cron = JobScheduler::new();
     let path = Path::new(STORAGE);
@@ -180,9 +180,9 @@ fn main() {
                 }
                 x => {
                     print(format!(
-                        "Unable to connect to Google when looking for calendar {}: {:?}",
-                        calendar, x
-                    )); //Sometimes this has meant that the printer was off for a while and had to renegotiate keys
+                            "Unable to connect to Google when looking for calendar {}: {:?}",
+                            calendar, x
+                            )); //Sometimes this has meant that the printer was off for a while and had to renegotiate keys
                 }
             };
         }
@@ -190,17 +190,17 @@ fn main() {
         print(format!("{}", view_from_items(all_events)));
         for game in share
             .games
-            .iter()
-            .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
-        {
-            if game.name == "Game Two" {
-                print(github_graph(&game));
-                // Gradually layering games isn't thought through yet
-                //if consecutive_days(game) < 7 {
-                //    break;
-                //}
-            }
-        }
+                .iter()
+                .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
+                {
+                    if game.name == "Game Two" {
+                        print(github_graph(&game));
+                        // Gradually layering games isn't thought through yet
+                        //if consecutive_days(game) < 7 {
+                        //    break;
+                        //}
+                    }
+                }
     };
 
     let _check_ynab_api =
@@ -222,11 +222,11 @@ fn main() {
                 }
             }) {
                 let mut model = share_for_ynab.lock().expect("Couldn't unlock YNAB share");
-                 *model = updated(
+                *model = updated(
                     &mut *model,
                     Msg::GameOccurence("ynab".to_owned(), Local::now()),
-                );
-           }
+                    );
+            }
         };
 
     let update_meta_game = move || {
@@ -288,110 +288,113 @@ fn main() {
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
         let server = Server::new(PORT, move |request| {
-            router!(request,
-            (GET) ["/"] => {
-                let file = File::open("site/index.html").unwrap();
-                Response::from_file("text/html; charset=utf8", file) },
-            (GET) ["/games"] => {
-                let store = share_for_web_interface.lock().unwrap();
-                let serialized = serde_json::to_string(&store.clone()).unwrap();
-                Response::text(serialized)
-            },
-            (GET) ["/games/{name}", name: String] => {
-                 let store = share_for_web_interface.lock().unwrap();
-                 let mut games:Vec<&Game> = store.games.iter().filter(|g| g.name == name).collect(); //TODO Make impossible states impossible
-                 match games.pop(){
-                     Some(game) => {
-                         let serialized = serde_json::to_string(game).unwrap();
-                         Response::text(serialized)
-                         },
-                     None => Response::empty_404()
-                 }
-            },
-            (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
-                let mut store = share_for_web_interface.lock().unwrap();
-                let start = Local::now();
-                let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
-                *store = updated(&mut *store, Msg::GameCreate(name, start, end));
-                let serialized = serde_json::to_string(&store.clone()).unwrap();
+            log(request, io::stdout(), || {
 
-                let path = Path::new(STORAGE);
-                let mut file = match File::create(path) {
-                    Err(_) => panic!("couldn't create file for server storage"),
-                    Ok(file) => file
-                };
-                match file.write_all(serialized.as_bytes()) {
-                    Err(_) => panic!("server couldn't write store to file"),
-                    Ok(_) => ()
-                };
-                Response::text(serialized)
-            },
-            (POST) ["/overwrite_game_file"] => {
-                let new_model: Model  = try_or_400!(rouille::input::json_input(request));
-                let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
-                std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
+                router!(request,
+                        (GET) ["/"] => {
+                            let file = File::open("site/index.html").unwrap();
+                            Response::from_file("text/html; charset=utf8", file) },
+                            (GET) ["/games"] => {
+                                let store = share_for_web_interface.lock().unwrap();
+                                let serialized = serde_json::to_string(&store.clone()).unwrap();
+                                Response::text(serialized)
+                            },
+                            (GET) ["/games/{name}", name: String] => {
+                                let store = share_for_web_interface.lock().unwrap();
+                                let mut games:Vec<&Game> = store.games.iter().filter(|g| g.name == name).collect(); //TODO Make impossible states impossible
+                                match games.pop(){
+                                    Some(game) => {
+                                        let serialized = serde_json::to_string(game).unwrap();
+                                        Response::text(serialized)
+                                    },
+                                    None => Response::empty_404()
+                                }
+                            },
+                            (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
+                                let mut store = share_for_web_interface.lock().unwrap();
+                                let start = Local::now();
+                                let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
+                                *store = updated(&mut *store, Msg::GameCreate(name, start, end));
+                                let serialized = serde_json::to_string(&store.clone()).unwrap();
 
-                let serialized = serde_json::to_string(&new_model).unwrap();
-                let path = Path::new(STORAGE);
-                let mut file = match File::create(path) {
-                    Err(_) => panic!("couldn't create file for server storage"),
-                    Ok(file) => file
-                };
-                match file.write_all(serialized.as_bytes()) {
-                    Err(_) => panic!("server couldn't write store to file"),
-                    Ok(_) => ()
-                };
-                Response::text(serialized)
-            },
-            (GET) ["/read_game_file"] => {
-                let file = File::open(STORAGE).unwrap();
-                Response::from_file("text/html; charset=utf8", file)
-            },
-            (GET) ["/print"] => {
-                let tx1 = for_web_proc.lock().unwrap();
-                tx1.send(String::from("please print now")).unwrap();
-                Response::text("Okay".to_owned()) 
-            },
-            (GET) ["/{name}", name: String] => {
-                let mut serialized ;
-                {
-                    let mut store = share_for_web_interface.lock().unwrap();
-                    //I want a mutable borrow, not a move
-                    // Can you pass a mutable borrow to functions?
-                    // Can you set an immutable borrow?
-                    // What IIIS dereferencing?
-                    // Is it just taking the shells of of types?
-                    // Is each layer maybe borrowed, maybe owned?
-                    // How do I write to a layer? mutating the layer above?
-                    // &(this) is a place expression. So any place can go there.
-                    // &(functionCall) is using a temporary, implicit let expression to store functionCall then make the borrow
-                    // *dereference ALWAYS implicitly borrows!
-                    // So it never moves
-                    // So we could tell it to borrow mut or not
-                    // *share.lock().unwrap() -> *&share.lock().unwrap() -> let &x = &share.lock().unwrap(); *&x
-                    // Wtf is the place in a place_expression for a borrow? in this article's first example?
-                    //* -> & -> let
-                    // ONLY SOMETIMES!
-                    // f
-                    *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
-                    serialized = serde_json::to_string(&store.clone()).unwrap();
-                }
-                update_meta_game();
+                                let path = Path::new(STORAGE);
+                                let mut file = match File::create(path) {
+                                    Err(_) => panic!("couldn't create file for server storage"),
+                                    Ok(file) => file
+                                };
+                                match file.write_all(serialized.as_bytes()) {
+                                    Err(_) => panic!("server couldn't write store to file"),
+                                    Ok(_) => ()
+                                };
+                                Response::text(serialized)
+                            },
+                            (POST) ["/overwrite_game_file"] => {
+                                let new_model: Model  = try_or_400!(rouille::input::json_input(request));
+                                let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
+                                std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
 
-                let path = Path::new(STORAGE);
-                let mut file = match File::create(path) {
-                    Err(_) => panic!("couldn't create file for server storage"),
-                    Ok(file) => file
-                };
-                match file.write_all(serialized.as_bytes()) {
-                    Err(_) => panic!("server couldn't write store to file"),
-                    Ok(_) => ()
-                };
+                                let serialized = serde_json::to_string(&new_model).unwrap();
+                                let path = Path::new(STORAGE);
+                                let mut file = match File::create(path) {
+                                    Err(_) => panic!("couldn't create file for server storage"),
+                                    Ok(file) => file
+                                };
+                                match file.write_all(serialized.as_bytes()) {
+                                    Err(_) => panic!("server couldn't write store to file"),
+                                    Ok(_) => ()
+                                };
+                                Response::text(serialized)
+                            },
+                            (GET) ["/read_game_file"] => {
+                                let file = File::open(STORAGE).unwrap();
+                                Response::from_file("text/html; charset=utf8", file)
+                            },
+                            (GET) ["/print"] => {
+                                let tx1 = for_web_proc.lock().unwrap();
+                                tx1.send(String::from("please print now")).unwrap();
+                                Response::text("Okay".to_owned()) 
+                            },
+                            (GET) ["/{name}", name: String] => {
+                                let mut serialized ;
+                                {
+                                    let mut store = share_for_web_interface.lock().unwrap();
+                                    //I want a mutable borrow, not a move
+                                    // Can you pass a mutable borrow to functions?
+                                    // Can you set an immutable borrow?
+                                    // What IIIS dereferencing?
+                                    // Is it just taking the shells of of types?
+                                    // Is each layer maybe borrowed, maybe owned?
+                                    // How do I write to a layer? mutating the layer above?
+                                    // &(this) is a place expression. So any place can go there.
+                                    // &(functionCall) is using a temporary, implicit let expression to store functionCall then make the borrow
+                                    // *dereference ALWAYS implicitly borrows!
+                                    // So it never moves
+                                    // So we could tell it to borrow mut or not
+                                    // *share.lock().unwrap() -> *&share.lock().unwrap() -> let &x = &share.lock().unwrap(); *&x
+                                    // Wtf is the place in a place_expression for a borrow? in this article's first example?
+                                    //* -> & -> let
+                                    // ONLY SOMETIMES!
+                                    // f
+                                    *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
+                                    serialized = serde_json::to_string(&store.clone()).unwrap();
+                                }
+                                update_meta_game();
 
-                Response::text(serialized)
-            },
-            _ => Response::empty_404()
-         )
+                                let path = Path::new(STORAGE);
+                                let mut file = match File::create(path) {
+                                    Err(_) => panic!("couldn't create file for server storage"),
+                                    Ok(file) => file
+                                };
+                                match file.write_all(serialized.as_bytes()) {
+                                    Err(_) => panic!("server couldn't write store to file"),
+                                    Ok(_) => ()
+                                };
+
+                                Response::text(serialized)
+                            },
+                            _ => Response::empty_404()
+                                )
+            } )
         }).expect("Unable to start web server");
         server.run();
         print("The server stopped running!".to_owned());
@@ -399,12 +402,12 @@ fn main() {
 
     print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
     cron.add(Job::new(
-        "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
-        move || {
-            let tx1 = another.lock().unwrap();
-            tx1.send(String::from("please print now")).unwrap();
-        }
-    ));
+            "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
+            move || {
+                let tx1 = another.lock().unwrap();
+                tx1.send(String::from("please print now")).unwrap();
+            }
+            ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
     loop {
         cron.tick();
@@ -576,7 +579,7 @@ fn updated(model: &mut Model, msg: Msg) -> Model {
                         stored_game
                     }
                 }).collect(),
-            metas: None
+                metas: None
         },
         Msg::GameCreate(name, start, end) => {
             let new_game = Game {
@@ -595,9 +598,9 @@ pub struct PrinterAuthenticatorDelegate;
 impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
     fn present_user_code(&mut self, pi: &PollInformation) {
         print(format!(
-            "Please enter {} at {} and grant access to this application",
-            pi.user_code, pi.verification_url
-        ))
+                "Please enter {} at {} and grant access to this application",
+                pi.user_code, pi.verification_url
+                ))
     }
 }
 
