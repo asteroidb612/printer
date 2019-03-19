@@ -343,6 +343,8 @@ fn main() {
                                     Err(_) => panic!("server couldn't write store to file"),
                                     Ok(_) => ()
                                 };
+                                let mut old_model = share_for_web_interface.lock().unwrap();
+                                *old_model = new_model;
                                 Response::text(serialized)
                             },
                             (GET) ["/read_game_file"] => {

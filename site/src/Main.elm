@@ -2,12 +2,14 @@ module Main exposing (main)
 
 import Browser exposing (document)
 import Debug
+import Element as E
 import Html exposing (a, div, text)
 import Html.Attributes exposing (href)
 import Http
 import Iso8601
 import Json.Decode as D
 import List exposing (map)
+import Task
 import Time exposing (Posix)
 
 
@@ -22,7 +24,7 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init flags =
-    ( { games = Nothing }, fetchGames )
+    ( { games = Nothing, now = Nothing }, Cmd.batch [ fetchGames, Task.perform GotTime Time.now ] )
 
 
 type alias Game =
@@ -30,17 +32,33 @@ type alias Game =
 
 
 type alias Model =
-    { games : Maybe (List Game) }
+    { games : Maybe (List Game), now : Maybe Posix }
 
 
 type Msg
     = GotGames (Result Http.Error (List Game))
+    | GotTime Posix
     | ButtonPressed
 
 
 view model =
+    let
+        activeGames =
+            case ( model.games, model.now ) of
+                ( Just games, Just now ) ->
+                    List.filter (\game -> Time.posixToMillis game.start < Time.posixToMillis now && Time.posixToMillis game.end > Time.posixToMillis now) games
+
+                _ ->
+                    []
+
+        gameView game =
+            E.link [] { url = "/" ++ game.name, label = E.text game.name }
+
+        gamesView =
+            E.layout [] (E.column [] (List.map gameView activeGames))
+    in
     { title = "Ludi"
-    , body = [ text "Hello World" ]
+    , body = [ gamesView ]
     }
 
 
@@ -57,6 +75,9 @@ update msg model =
 
         ButtonPressed ->
             ( model, fetchGames )
+
+        GotTime time ->
+            ( { model | now = Just time }, Cmd.none )
 
 
 fetchGames : Cmd Msg
