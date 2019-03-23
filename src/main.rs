@@ -141,11 +141,13 @@ fn main() {
             }
         }
     };
-    let share_for_web_interface = Arc::new(Mutex::new(model)); //What are memory implications of a move?
-    let share_for_cron = share_for_web_interface.clone(); 
-    let share_for_ynab = share_for_web_interface.clone();
-    let share_for_meta_game = share_for_web_interface.clone();
 
+    //Set up a channels for communication between threads
+    let (send_msg, recieve_msg) = mpsc::channel();
+    let for_web_proc = Arc::new(Mutex::new(send_msg));
+    let for_cron = for_web_proc.clone();
+    let for_ynab = for_web_proc.clone();
+    let for_meta = for_web_proc.clone();
 
     let print_next_five_days = move || {
         println!("print_next_five_days");
@@ -186,9 +188,8 @@ fn main() {
                 }
             };
         }
-        let share = share_for_cron.lock().unwrap();
         print(format!("{}", view_from_items(all_events)));
-        for game in share
+        for game in &model 
             .games
                 .iter()
                 .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
@@ -202,7 +203,6 @@ fn main() {
                     }
                 }
     };
-
     let _check_ynab_api =
         move || {
             let client = reqwest::Client::new();
@@ -221,16 +221,12 @@ fn main() {
                     _ => true,
                 }
             }) {
-                let mut model = share_for_ynab.lock().expect("Couldn't unlock YNAB share");
-                *model = updated(
-                    &mut *model,
-                    Msg::GameOccurence("ynab".to_owned(), Local::now()),
-                    );
+                let tx1 = for_ynab.lock().unwrap();
+                tx1.send(Msg::GameOccurence("ynab".to_owned(), Local::now()));
             }
         };
 
     let update_meta_game = move || {
-        let mut model = share_for_meta_game.lock().expect("Couldn't unlock meta share");
         //We're blocking until we get the model but the thread has the model so we're deadlocked!
 
         let mut work_on_time = false;
@@ -242,7 +238,7 @@ fn main() {
         let today = Local::now().date();
         let weekday = today.weekday();
         //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
-        let games = model.games.clone(); 
+        let games = &model.games.clone(); 
 
         for game in games {
             let game_from_today = match game.events.into_iter().last() {
@@ -273,17 +269,11 @@ fn main() {
         }
 
         if work_on_time && sleep_on_time && !clenches && !picks && played_20 {
-            *model = updated(
-                &mut *model,
-                Msg::GameOccurence("Game_Two".to_owned(), Local::now()),
-                );
+            let tx1 = for_meta.lock().unwrap();
+            tx1.send(Msg::GameOccurence("Game_Two".to_owned(), Local::now()));
         }
     };
 
-    //Set up a channel for a request thread to tell the main thread to print_next_five_days()
-    let (tx, rx) = mpsc::channel();
-    let for_web_proc = Arc::new(Mutex::new(tx));
-    let another = for_web_proc.clone();
 
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
@@ -295,13 +285,13 @@ fn main() {
                             let file = File::open("site/index.html").unwrap();
                             Response::from_file("text/html; charset=utf8", file) },
                             (GET) ["/games"] => {
-                                let store = share_for_web_interface.lock().unwrap();
-                                let serialized = serde_json::to_string(&store.clone()).unwrap();
-                                Response::text(serialized)
+                                Response::text(serde_json::to_string(&model).unwrap())
                             },
                             (GET) ["/games/{name}", name: String] => {
-                                let store = share_for_web_interface.lock().unwrap();
-                                let mut games:Vec<&Game> = store.games.iter().filter(|g| g.name == name).collect(); //TODO Make impossible states impossible
+                                let store = &model.clone();
+                                let mut games:Vec<&Game> = store.games.iter()
+                                    .filter(|g| g.name == name)
+                                    .collect(); //TODO Make impossible states impossible
                                 match games.pop(){
                                     Some(game) => {
                                         let serialized = serde_json::to_string(game).unwrap();
@@ -311,11 +301,11 @@ fn main() {
                                 }
                             },
                             (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
-                                let mut store = share_for_web_interface.lock().unwrap();
                                 let start = Local::now();
                                 let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
-                                *store = updated(&mut *store, Msg::GameCreate(name, start, end));
-                                let serialized = serde_json::to_string(&store.clone()).unwrap();
+                                let tx1 = for_web_proc.lock().unwrap();
+                                tx1.send(Msg::GameCreate(name, start, end));
+                                let serialized = serde_json::to_string(&model).unwrap();
 
                                 let path = Path::new(STORAGE);
                                 let mut file = match File::create(path) {
@@ -343,8 +333,8 @@ fn main() {
                                     Err(_) => panic!("server couldn't write store to file"),
                                     Ok(_) => ()
                                 };
-                                let mut old_model = share_for_web_interface.lock().unwrap();
-                                *old_model = new_model;
+                                let tx1 = for_web_proc.lock().unwrap();
+                                tx1.send(Msg::Replace(new_model));
                                 Response::text(serialized)
                             },
                             (GET) ["/read_game_file"] => {
@@ -353,34 +343,13 @@ fn main() {
                             },
                             (GET) ["/print"] => {
                                 let tx1 = for_web_proc.lock().unwrap();
-                                tx1.send(String::from("please print now")).unwrap();
+                                tx1.send(Msg::Print()).unwrap();
                                 Response::text("Okay".to_owned()) 
                             },
                             (GET) ["/{name}", name: String] => {
-                                let mut serialized ;
-                                {
-                                    let mut store = share_for_web_interface.lock().unwrap();
-                                    //I want a mutable borrow, not a move
-                                    // Can you pass a mutable borrow to functions?
-                                    // Can you set an immutable borrow?
-                                    // What IIIS dereferencing?
-                                    // Is it just taking the shells of of types?
-                                    // Is each layer maybe borrowed, maybe owned?
-                                    // How do I write to a layer? mutating the layer above?
-                                    // &(this) is a place expression. So any place can go there.
-                                    // &(functionCall) is using a temporary, implicit let expression to store functionCall then make the borrow
-                                    // *dereference ALWAYS implicitly borrows!
-                                    // So it never moves
-                                    // So we could tell it to borrow mut or not
-                                    // *share.lock().unwrap() -> *&share.lock().unwrap() -> let &x = &share.lock().unwrap(); *&x
-                                    // Wtf is the place in a place_expression for a borrow? in this article's first example?
-                                    //* -> & -> let
-                                    // ONLY SOMETIMES!
-                                    // f
-                                    *store = updated(&mut *store, Msg::GameOccurence(name, Local::now()));
-                                    serialized = serde_json::to_string(&store.clone()).unwrap();
-                                }
-                                update_meta_game();
+                                let tx1 = for_web_proc.lock().unwrap();
+                                tx1.send(Msg::GameOccurence(name, Local::now()));
+                                let serialized = serde_json::to_string(&model).unwrap();
 
                                 let path = Path::new(STORAGE);
                                 let mut file = match File::create(path) {
@@ -406,17 +375,24 @@ fn main() {
     cron.add(Job::new(
             "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
             move || {
-                let tx1 = another.lock().unwrap();
-                tx1.send(String::from("please print now")).unwrap();
+                let tx1 = for_cron.lock().unwrap();
+                tx1.send(Msg::Print()).unwrap();
             }
             ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
     loop {
         cron.tick();
-        if let Ok(_) = rx.try_recv() {
-            print_next_five_days();
+        if let Ok(msg) = recieve_msg.try_recv() {
+            match msg {
+                Msg::Print() => {
+                    print_next_five_days();
+                },
+                Default => {
+                    model.update(msg);
+                    update_meta_game();
+                }
+            }
         }
-
         std::thread::sleep(Duration::from_millis(500));
     }
 }
@@ -542,9 +518,41 @@ struct Model {
     metas: Option<Vec<Meta>>
 }
 
+impl Model {
+    fn update( mut self, msg: Msg) {
+        let now = Local::now();
+        match msg {
+            Msg::GameOccurence(occurrence_name, time) =>{  
+                for mut game in self.games {
+                    if game.name == occurrence_name && game.end > now {
+                        game.events.push(time);
+                    }
+                }
+            },
+            Msg::GameCreate(name, start, end) => {
+                let new_game = Game {
+                    name: name,
+                    start: start,
+                    end: end,
+                    events: vec![],
+                };
+                self.games.push(new_game);
+            },
+            Msg::Replace(new_model) => {
+                self = new_model;
+            },
+            Msg::Print() => {}
+        }
+    }
+
+
+}
+
 enum Msg {
+    Print(),
     GameOccurence(String, Time),
     GameCreate(String, Time, Time), //TODO Should this message just carry a game?
+    Replace(Model)
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -561,37 +569,6 @@ struct Data {
 struct Transaction {
     approved: bool,
     flag_color: Option<String>,
-}
-
-fn updated(model: &mut Model, msg: Msg) -> Model {
-    let mut c = model.clone(); //Really? I Have to borrow mut AND clone? Could I just clone? What problems is each solving??
-    let now = Local::now();
-    match msg {
-        Msg::GameOccurence(game, time) => Model {
-            games: c
-                .games
-                .into_iter()
-                .map(|mut stored_game| {
-                    if stored_game.name == game && stored_game.end > now {
-                        stored_game.events.push(time);
-                        stored_game //Hey that's not immutable... maybe I miss conslists
-                    } else {
-                        stored_game
-                    }
-                }).collect(),
-                metas: None
-        },
-        Msg::GameCreate(name, start, end) => {
-            let new_game = Game {
-                name: name,
-                start: start,
-                end: end,
-                events: vec![],
-            };
-            c.games.push(new_game);
-            c
-        }
-    }
 }
 
 pub struct PrinterAuthenticatorDelegate;
