@@ -16,6 +16,8 @@ extern crate serde_derive;
 extern crate rouille;
 #[macro_use]
 extern crate cfg_if;
+#[macro_use]
+extern crate lazy_static; // Are singletons evil? elmy? https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
 
 use calendar3::CalendarHub;
 use chrono::offset::*;
@@ -53,6 +55,38 @@ cfg_if! {
         static STORAGE: &str = "/data/store.json";
         static TOKEN_STORAGE: &str = "/data/token";
     }
+}
+
+lazy_static! {
+    static ref MODEL: Mutex<Model> = {
+
+        let path = Path::new(STORAGE);
+        //TODO This err handling sucks
+        let model: Model = match File::open(&path) {
+            Err(_why) => {
+                print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
+                Default::default()
+            }
+            Ok(mut file) => {
+                let mut s = String::new();
+                match file.read_to_string(&mut s) {
+                    Err(_why) => {
+                        print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
+                        Default::default()
+                    }
+                    Ok(_) => match serde_json::from_str(&mut s) {
+                        Err(_why) => {
+                            print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
+                            Default::default()
+                        }
+                        Ok(parsed_store) => parsed_store,
+                    },
+                }
+            }
+        };
+
+        Mutex::new(model)
+    };
 }
 
 fn print(s: String) {
@@ -116,31 +150,6 @@ fn main() {
                 );
 
     let mut cron = JobScheduler::new();
-    let path = Path::new(STORAGE);
-
-    //TODO Clean up: This should have one error, one default call, and be flatter
-    let model: Model = match File::open(&path) {
-        Err(_why) => {
-            print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
-            Default::default()
-        }
-        Ok(mut file) => {
-            let mut s = String::new();
-            match file.read_to_string(&mut s) {
-                Err(_why) => {
-                    print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
-                    Default::default()
-                }
-                Ok(_) => match serde_json::from_str(&mut s) {
-                    Err(_why) => {
-                        print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
-                        Default::default()
-                    }
-                    Ok(parsed_store) => parsed_store,
-                },
-            }
-        }
-    };
 
     //Set up a channels for communication between threads
     let (send_msg, recieve_msg) = mpsc::channel();
@@ -189,7 +198,8 @@ fn main() {
             };
         }
         print(format!("{}", view_from_items(all_events)));
-        for game in &model 
+        for game in MODEL.lock().unwrap()
+            .clone()
             .games
                 .iter()
                 .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
@@ -238,7 +248,7 @@ fn main() {
         let today = Local::now().date();
         let weekday = today.weekday();
         //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
-        let games = &model.games.clone(); 
+        let games = MODEL.lock().unwrap().clone().games; 
 
         for game in games {
             let game_from_today = match game.events.into_iter().last() {
@@ -285,10 +295,11 @@ fn main() {
                             let file = File::open("site/index.html").unwrap();
                             Response::from_file("text/html; charset=utf8", file) },
                             (GET) ["/games"] => {
-                                Response::text(serde_json::to_string(&model).unwrap())
+                                let store = MODEL.lock().unwrap().clone();
+                                Response::text(serde_json::to_string(&store).unwrap())
                             },
                             (GET) ["/games/{name}", name: String] => {
-                                let store = &model.clone();
+                                let store = MODEL.lock().unwrap().clone();
                                 let mut games:Vec<&Game> = store.games.iter()
                                     .filter(|g| g.name == name)
                                     .collect(); //TODO Make impossible states impossible
@@ -305,7 +316,7 @@ fn main() {
                                 let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
                                 let tx1 = for_web_proc.lock().unwrap();
                                 tx1.send(Msg::GameCreate(name, start, end));
-                                let serialized = serde_json::to_string(&model).unwrap();
+                                let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
 
                                 let path = Path::new(STORAGE);
                                 let mut file = match File::create(path) {
@@ -349,7 +360,7 @@ fn main() {
                             (GET) ["/{name}", name: String] => {
                                 let tx1 = for_web_proc.lock().unwrap();
                                 tx1.send(Msg::GameOccurence(name, Local::now()));
-                                let serialized = serde_json::to_string(&model).unwrap();
+                                let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
 
                                 let path = Path::new(STORAGE);
                                 let mut file = match File::create(path) {
@@ -388,7 +399,7 @@ fn main() {
                     print_next_five_days();
                 },
                 Default => {
-                    model.update(msg);
+                    MODEL.lock().unwrap().update(msg);
                     update_meta_game();
                 }
             }
