@@ -60,31 +60,12 @@ cfg_if! {
 lazy_static! {
     static ref MODEL: Mutex<Model> = {
         let path = Path::new(STORAGE);
-        //TODO This err handling sucks
-        let model: Model = match File::open(&path) {
-            Err(_why) => {
-                print!("Couldn't open {:#?}: {}\nContinuing.\n", path, _why);
-                Default::default()
-            }
-            Ok(mut file) => {
-                let mut s = String::new();
-                match file.read_to_string(&mut s) {
-                    Err(_why) => {
-                        print!("Couldn't read file {:#?}: {}\nContinuing.\n", path, _why);
-                        Default::default()
-                    }
-                    Ok(_) => match serde_json::from_str(&mut s) {
-                        Err(_why) => {
-                            print!("Couldn't parse {:#?}: {}\nContinuing.\n", path, _why);
-                            Default::default()
-                        }
-                        Ok(parsed_store) => parsed_store,
-                    },
-                }
-            }
-        };
-
-        Mutex::new(model)
+        Mutex::new(File::open(&path).and_then(|mut file|{
+            let mut s = String::new();
+            file.read_to_string(&mut s)?;
+            let model : Model = serde_json::from_str(&mut s)?;
+            Ok(model)
+        }).unwrap_or(Default::default()))
     };
 }
 
