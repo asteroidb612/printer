@@ -70,9 +70,12 @@ lazy_static! {
 }
 
 fn update(msg: Msg) {
-    { //Scope to prevent deadlock on recursion
+    //Scope to prevent deadlock on recursion
+    { 
         let mut model = MODEL.lock().unwrap();
         let now = Local::now();
+
+        //Update
         match msg {
             Msg::GameOccurence(occurrence_name, time) =>{  
                 for mut game in model.games.clone() { //TODO Why did I have to add clone here? It was borrowed otherwise? implicitly?
@@ -94,6 +97,15 @@ fn update(msg: Msg) {
                 *model = new_model;
             },
         }
+
+        // Persistence
+        serde_json::to_string(&*model)
+            .map_err(|serde_err|{ io::Error::new(io::ErrorKind::Other, serde_err)}).and_then(|serialized|{
+                let mut file = File::create(Path::new(STORAGE))?;
+                file.write_all(serialized.as_bytes())?;
+                Ok(())
+            }).expect("Writing on update failed");
+
     }
     //We're blocking until we get the model but the thread has the model so we're deadlocked!
 
@@ -319,16 +331,6 @@ fn main() {
                                 let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
                                 update(Msg::GameCreate(name, start, end));
                                 let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
-
-                                let path = Path::new(STORAGE);
-                                let mut file = match File::create(path) {
-                                    Err(_) => panic!("couldn't create file for server storage"),
-                                    Ok(file) => file
-                                };
-                                match file.write_all(serialized.as_bytes()) {
-                                    Err(_) => panic!("server couldn't write store to file"),
-                                    Ok(_) => ()
-                                };
                                 Response::text(serialized)
                             },
                             (POST) ["/overwrite_game_file"] => {
@@ -361,17 +363,6 @@ fn main() {
                             (GET) ["/{name}", name: String] => {
                                 update(Msg::GameOccurence(name, Local::now()));
                                 let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
-
-                                let path = Path::new(STORAGE);
-                                let mut file = match File::create(path) {
-                                    Err(_) => panic!("couldn't create file for server storage"),
-                                    Ok(file) => file
-                                };
-                                match file.write_all(serialized.as_bytes()) {
-                                    Err(_) => panic!("server couldn't write store to file"),
-                                    Ok(_) => ()
-                                };
-
                                 Response::text(serialized)
                             },
                             _ => Response::empty_404()
