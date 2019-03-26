@@ -59,7 +59,6 @@ cfg_if! {
 
 lazy_static! {
     static ref MODEL: Mutex<Model> = {
-
         let path = Path::new(STORAGE);
         //TODO This err handling sucks
         let model: Model = match File::open(&path) {
@@ -88,6 +87,81 @@ lazy_static! {
         Mutex::new(model)
     };
 }
+
+fn update(msg: Msg) {
+    { //Scope to prevent deadlock on recursion
+        let mut model = MODEL.lock().unwrap();
+        let now = Local::now();
+        match msg {
+            Msg::GameOccurence(occurrence_name, time) =>{  
+                for mut game in model.games.clone() { //TODO Why did I have to add clone here? It was borrowed otherwise? implicitly?
+                    if game.name == occurrence_name && game.end > now {
+                        game.events.push(time);
+                    }
+                }
+            },
+            Msg::GameCreate(name, start, end) => {
+                let new_game = Game {
+                    name: name,
+                    start: start,
+                    end: end,
+                    events: vec![],
+                };
+                model.games.push(new_game);
+            },
+            Msg::Replace(new_model) => {
+                *model = new_model;
+            },
+        }
+    }
+    //We're blocking until we get the model but the thread has the model so we're deadlocked!
+
+    let mut work_on_time = false;
+    let mut sleep_on_time = false;
+    let mut clenches = false;
+    let mut picks = false;
+    let mut played_20 = false;
+
+    let today = Local::now().date();
+    let weekday = today.weekday();
+    //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
+    {
+        let games = MODEL.lock().unwrap().clone().games;
+
+        for game in games {
+            let game_from_today = match game.events.into_iter().last() {
+                Some(last_game) => last_game.date() == today,
+                None => false
+            };
+            if game_from_today {
+                //This 's a workaround for some rust data difficulties I've yet to grock
+                if game.name == "Game_Two" {
+                    return //Prevents infinite recursion
+                }
+                if game.name == "work_on_time" || weekday == Sat || weekday == Sun {
+                    work_on_time = true;
+                }
+                if game.name == "sleep_on_time" || weekday == Sat || weekday == Fri {
+                    sleep_on_time = true;
+                }
+                if game.name == "no_clenches" {
+                    clenches = true; 
+                }
+                if game.name == "no_picks" {
+                    picks = true;
+                }
+                if game.name == "played_20" {
+                    played_20 = true;
+                }
+            }
+        }
+    }
+
+    if work_on_time && sleep_on_time && !clenches && !picks && played_20 {
+        update(Msg::GameOccurence("Game_Two".to_owned(), Local::now()));
+    }
+}
+
 
 fn print(s: String) {
     let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
@@ -155,8 +229,6 @@ fn main() {
     let (send_msg, recieve_msg) = mpsc::channel();
     let for_web_proc = Arc::new(Mutex::new(send_msg));
     let for_cron = for_web_proc.clone();
-    let for_ynab = for_web_proc.clone();
-    let for_meta = for_web_proc.clone();
 
     let print_next_five_days = move || {
         println!("print_next_five_days");
@@ -231,59 +303,9 @@ fn main() {
                     _ => true,
                 }
             }) {
-                let tx1 = for_ynab.lock().unwrap();
-                tx1.send(Msg::GameOccurence("ynab".to_owned(), Local::now()));
+                update(Msg::GameOccurence("ynab".to_owned(), Local::now()));
             }
         };
-
-    let update_meta_game = move || {
-        //We're blocking until we get the model but the thread has the model so we're deadlocked!
-
-        let mut work_on_time = false;
-        let mut sleep_on_time = false;
-        let mut clenches = false;
-        let mut picks = false;
-        let mut played_20 = false;
-
-        let today = Local::now().date();
-        let weekday = today.weekday();
-        //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
-        let games = MODEL.lock().unwrap().clone().games; 
-
-        for game in games {
-            let game_from_today = match game.events.into_iter().last() {
-                Some(last_game) => last_game.date() == today,
-                None => false
-            };
-            if game_from_today {
-                //This 's a workaround for some rust data difficulties I've yet to grock
-                if game.name == "Game_Two" {
-                    return
-                }
-                if game.name == "work_on_time" || weekday == Sat || weekday == Sun {
-                    work_on_time = true;
-                }
-                if game.name == "sleep_on_time" || weekday == Sat || weekday == Fri {
-                    sleep_on_time = true;
-                }
-                if game.name == "no_clenches" {
-                    clenches = true; 
-                }
-                if game.name == "no_picks" {
-                    picks = true;
-                }
-                if game.name == "played_20" {
-                    played_20 = true;
-                }
-            }
-        }
-
-        if work_on_time && sleep_on_time && !clenches && !picks && played_20 {
-            let tx1 = for_meta.lock().unwrap();
-            tx1.send(Msg::GameOccurence("Game_Two".to_owned(), Local::now()));
-        }
-    };
-
 
     //Could be nice to invert this - only spawn the thread if we have the file.
     std::thread::spawn(|| {
@@ -314,8 +336,7 @@ fn main() {
                             (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
                                 let start = Local::now();
                                 let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
-                                let tx1 = for_web_proc.lock().unwrap();
-                                tx1.send(Msg::GameCreate(name, start, end));
+                                update(Msg::GameCreate(name, start, end));
                                 let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
 
                                 let path = Path::new(STORAGE);
@@ -344,8 +365,7 @@ fn main() {
                                     Err(_) => panic!("server couldn't write store to file"),
                                     Ok(_) => ()
                                 };
-                                let tx1 = for_web_proc.lock().unwrap();
-                                tx1.send(Msg::Replace(new_model));
+                                update(Msg::Replace(new_model));
                                 Response::text(serialized)
                             },
                             (GET) ["/read_game_file"] => {
@@ -354,12 +374,11 @@ fn main() {
                             },
                             (GET) ["/print"] => {
                                 let tx1 = for_web_proc.lock().unwrap();
-                                tx1.send(Msg::Print()).unwrap();
+                                tx1.send(0).unwrap();
                                 Response::text("Okay".to_owned()) 
                             },
                             (GET) ["/{name}", name: String] => {
-                                let tx1 = for_web_proc.lock().unwrap();
-                                tx1.send(Msg::GameOccurence(name, Local::now()));
+                                update(Msg::GameOccurence(name, Local::now()));
                                 let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
 
                                 let path = Path::new(STORAGE);
@@ -387,25 +406,17 @@ fn main() {
             "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
             move || {
                 let tx1 = for_cron.lock().unwrap();
-                tx1.send(Msg::Print()).unwrap();
+                tx1.send(0).unwrap();
             }
             ));
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
     loop {
         cron.tick();
-        if let Ok(msg) = recieve_msg.try_recv() {
-            match msg {
-                Msg::Print() => {
-                    print_next_five_days();
-                },
-                Default => {
-                    MODEL.lock().unwrap().update(msg);
-                    update_meta_game();
-                }
+        if let Ok(_) = recieve_msg.try_recv() {
+            print_next_five_days();
             }
-        }
         std::thread::sleep(Duration::from_millis(500));
-    }
+}
 }
 
 fn view_from_items(items: Vec<calendar3::Event>) -> View {
@@ -529,38 +540,8 @@ struct Model {
     metas: Option<Vec<Meta>>
 }
 
-impl Model {
-    fn update( mut self, msg: Msg) {
-        let now = Local::now();
-        match msg {
-            Msg::GameOccurence(occurrence_name, time) =>{  
-                for mut game in self.games {
-                    if game.name == occurrence_name && game.end > now {
-                        game.events.push(time);
-                    }
-                }
-            },
-            Msg::GameCreate(name, start, end) => {
-                let new_game = Game {
-                    name: name,
-                    start: start,
-                    end: end,
-                    events: vec![],
-                };
-                self.games.push(new_game);
-            },
-            Msg::Replace(new_model) => {
-                self = new_model;
-            },
-            Msg::Print() => {}
-        }
-    }
-
-
-}
-
+#[derive(Clone)]
 enum Msg {
-    Print(),
     GameOccurence(String, Time),
     GameCreate(String, Time, Time), //TODO Should this message just carry a game?
     Replace(Model)
