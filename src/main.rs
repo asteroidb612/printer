@@ -69,6 +69,11 @@ lazy_static! {
     };
 }
 
+fn view() -> String {
+    let model = MODEL.lock().unwrap();
+    serde_json::to_string(&*model).expect("Model wasn't serializable").to_owned()
+}
+
 fn update(msg: Msg) {
     //Scope to prevent deadlock on recursion
     { 
@@ -94,6 +99,8 @@ fn update(msg: Msg) {
                 model.games.push(new_game);
             },
             Msg::Replace(new_model) => {
+                let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
+                std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
                 *model = new_model;
             },
         }
@@ -310,46 +317,18 @@ fn main() {
                             let file = File::open("site/index.html").unwrap();
                             Response::from_file("text/html; charset=utf8", file) },
                             (GET) ["/games"] => {
-                                let store = MODEL.lock().unwrap().clone();
-                                Response::text(serde_json::to_string(&store).unwrap())
-                            },
-                            (GET) ["/games/{name}", name: String] => {
-                                let store = MODEL.lock().unwrap().clone();
-                                let mut games:Vec<&Game> = store.games.iter()
-                                    .filter(|g| g.name == name)
-                                    .collect(); //TODO Make impossible states impossible
-                                match games.pop(){
-                                    Some(game) => {
-                                        let serialized = serde_json::to_string(game).unwrap();
-                                        Response::text(serialized)
-                                    },
-                                    None => Response::empty_404()
-                                }
+                                Response::text(view())
                             },
                             (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
                                 let start = Local::now();
                                 let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
                                 update(Msg::GameCreate(name, start, end));
-                                let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
-                                Response::text(serialized)
+                                Response::text(view())
                             },
                             (POST) ["/overwrite_game_file"] => {
                                 let new_model: Model  = try_or_400!(rouille::input::json_input(request));
-                                let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
-                                std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
-
-                                let serialized = serde_json::to_string(&new_model).unwrap();
-                                let path = Path::new(STORAGE);
-                                let mut file = match File::create(path) {
-                                    Err(_) => panic!("couldn't create file for server storage"),
-                                    Ok(file) => file
-                                };
-                                match file.write_all(serialized.as_bytes()) {
-                                    Err(_) => panic!("server couldn't write store to file"),
-                                    Ok(_) => ()
-                                };
                                 update(Msg::Replace(new_model));
-                                Response::text(serialized)
+                                Response::text(view())
                             },
                             (GET) ["/read_game_file"] => {
                                 let file = File::open(STORAGE).unwrap();
