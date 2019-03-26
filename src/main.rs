@@ -83,12 +83,14 @@ fn view() -> Model {
 
 fn update(msg: Msg) {
     //Scope to prevent deadlock on recursion
+    let recursively_update_meta_games;
     { 
         let mut model = MODEL.lock().unwrap();
         let now = Local::now();
 
         //Update
         match msg {
+            //TODO CRIT - THIS PROBABLY DOESN"T WORK
             Msg::GameOccurence(occurrence_name, time) =>{  
                 for mut game in model.games.clone() { //TODO Why did I have to add clone here? It was borrowed otherwise? implicitly?
                     if game.name == occurrence_name && game.end > now {
@@ -120,28 +122,22 @@ fn update(msg: Msg) {
                 Ok(())
             }).expect("Writing on update failed");
 
-    }
-    //We're blocking until we get the model but the thread has the model so we're deadlocked!
+        //Decide whether to update meta games
+        let mut work_on_time = false;
+        let mut sleep_on_time = false;
+        let mut clenches = false;
+        let mut picks = false;
+        let mut played_20 = false;
 
-    let mut work_on_time = false;
-    let mut sleep_on_time = false;
-    let mut clenches = false;
-    let mut picks = false;
-    let mut played_20 = false;
-
-    let today = Local::now().date();
-    let weekday = today.weekday();
-    //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
-    {
-        let games = MODEL.lock().unwrap().clone().games;
-
-        for game in games {
+        let today = Local::now().date();
+        let weekday = today.weekday();
+        //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
+        for game in model.games.clone() {
             let game_from_today = match game.events.into_iter().last() {
                 Some(last_game) => last_game.date() == today,
                 None => false
             };
             if game_from_today {
-                //This 's a workaround for some rust data difficulties I've yet to grock
                 if game.name == "Game_Two" {
                     return //Prevents infinite recursion
                 }
@@ -162,9 +158,10 @@ fn update(msg: Msg) {
                 }
             }
         }
+        recursively_update_meta_games  = work_on_time && sleep_on_time && !clenches && !picks && played_20;
     }
 
-    if work_on_time && sleep_on_time && !clenches && !picks && played_20 {
+    if recursively_update_meta_games {
         update(Msg::GameOccurence("Game_Two".to_owned(), Local::now()));
     }
 }
