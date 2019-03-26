@@ -58,6 +58,10 @@ cfg_if! {
 }
 
 lazy_static! {
+    // Reasons we're touching the model:
+    // - To update it with a Msg (handled by update)
+    // - To send a serialization of it (handled by view)
+    // - To iterate through games while printing (Direct MODEL access, then clone)
     static ref MODEL: Mutex<Model> = {
         let path = Path::new(STORAGE);
         Mutex::new(File::open(&path).and_then(|mut file|{
@@ -69,9 +73,12 @@ lazy_static! {
     };
 }
 
-fn view() -> String {
-    let model = MODEL.lock().unwrap();
-    serde_json::to_string(&*model).expect("Model wasn't serializable").to_owned()
+fn serialized_view() -> String {
+    serde_json::to_string(&view()).expect("Model wasn't serializable").to_owned()
+}
+
+fn view() -> Model {
+    MODEL.lock().unwrap().to_owned()
 }
 
 fn update(msg: Msg) {
@@ -270,9 +277,7 @@ fn main() {
             };
         }
         print(format!("{}", view_from_items(all_events)));
-        for game in MODEL.lock().unwrap()
-            .clone()
-            .games
+        for game in view().games
                 .iter()
                 .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
                 {
@@ -317,18 +322,18 @@ fn main() {
                             let file = File::open("site/index.html").unwrap();
                             Response::from_file("text/html; charset=utf8", file) },
                             (GET) ["/games"] => {
-                                Response::text(view())
+                                Response::text(serialized_view())
                             },
                             (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
                                 let start = Local::now();
                                 let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
                                 update(Msg::GameCreate(name, start, end));
-                                Response::text(view())
+                                Response::text(serialized_view())
                             },
                             (POST) ["/overwrite_game_file"] => {
                                 let new_model: Model  = try_or_400!(rouille::input::json_input(request));
                                 update(Msg::Replace(new_model));
-                                Response::text(view())
+                                Response::text(serialized_view())
                             },
                             (GET) ["/read_game_file"] => {
                                 let file = File::open(STORAGE).unwrap();
@@ -341,8 +346,7 @@ fn main() {
                             },
                             (GET) ["/{name}", name: String] => {
                                 update(Msg::GameOccurence(name, Local::now()));
-                                let serialized = serde_json::to_string(&*MODEL.lock().unwrap()).unwrap();
-                                Response::text(serialized)
+                                Response::text(serialized_view())
                             },
                             _ => Response::empty_404()
                                 )
