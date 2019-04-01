@@ -91,8 +91,9 @@ fn update(msg: Msg) {
         //Update
         match msg {
             Msg::GameOccurence(occurrence_name, time) =>{  
+                //Wasteful - but I'm fine with it for now, probably switching vec->dict 
                 let new = &mut model.clone();
-                for mut game in &mut new.games { 
+                for mut game in &mut new.games { //Do I need a &mut for every level of nested data?
                     if game.name == occurrence_name && game.end > now {
                         game.events.push(time);
                     }
@@ -116,7 +117,7 @@ fn update(msg: Msg) {
         }
 
         // Persistence
-        serde_json::to_string(&*model)
+        serde_json::to_string(&*model) //&* because rust doesn't auto reference, only auto deref
             .map_err(|serde_err|{ io::Error::new(io::ErrorKind::Other, serde_err)}).and_then(|serialized|{
                 let mut file = File::create(Path::new(STORAGE))?;
                 file.write_all(serialized.as_bytes())?;
