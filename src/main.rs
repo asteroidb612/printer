@@ -90,13 +90,14 @@ fn update(msg: Msg) {
 
         //Update
         match msg {
-            //TODO CRIT - THIS PROBABLY DOESN"T WORK
             Msg::GameOccurence(occurrence_name, time) =>{  
-                for mut game in model.games.clone() { //TODO Why did I have to add clone here? It was borrowed otherwise? implicitly?
+                let new = &mut model.clone();
+                for mut game in &mut new.games { 
                     if game.name == occurrence_name && game.end > now {
                         game.events.push(time);
                     }
                 }
+                *model = new.to_owned();
             },
             Msg::GameCreate(name, start, end) => {
                 let new_game = Game {
