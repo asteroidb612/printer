@@ -91,14 +91,13 @@ fn update(msg: Msg) {
         //Update
         match msg {
             Msg::GameOccurence(occurrence_name, time) =>{  
-                //Wasteful - but I'm fine with it for now, probably switching vec->dict 
-                let new = &mut model.clone();
-                for mut game in &mut new.games { //Do I need a &mut for every level of nested data?
+                let games = &mut model.games;
+                for ref mut game in games {  //We want ref to games, not the iterator
                     if game.name == occurrence_name && game.end > now {
-                        game.events.push(time);
+                        let events = &mut game.events;
+                        events.push(time);
                     }
                 }
-                *model = new.to_owned();
             },
             Msg::GameCreate(name, start, end) => {
                 let new_game = Game {
