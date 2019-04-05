@@ -356,7 +356,7 @@ fn main() {
 
     print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
     cron.add(Job::new(
-            "0 0 15 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
+            "0 0 14 * * *".parse().unwrap(), //Package users Greenwhich mean time, so PAC is 15 - 7 == 8:00
             move || {
                 let tx1 = for_cron.lock().unwrap();
                 tx1.send(0).unwrap();
