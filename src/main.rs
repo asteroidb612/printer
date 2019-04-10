@@ -126,9 +126,9 @@ fn update(msg: Msg) {
         //Decide whether to update meta games
         let mut work_on_time = false;
         let mut sleep_on_time = false;
-        let mut clenches = false;
-        let mut picks = false;
+        let mut left_in_peace = false;
         let mut played_20 = false;
+        let mut changed_printer = false;
 
         let today = Local::now().date();
         let weekday = today.weekday();
@@ -148,18 +148,18 @@ fn update(msg: Msg) {
                 if game.name == "sleep_on_time" || weekday == Sat || weekday == Fri {
                     sleep_on_time = true;
                 }
-                if game.name == "no_clenches" {
-                    clenches = true; 
-                }
-                if game.name == "no_picks" {
-                    picks = true;
+                if game.name == "left_in_peace" || weekday == Sat || weekday == Sun {
+                    left_in_peace = true;
                 }
                 if game.name == "played_20" {
                     played_20 = true;
                 }
+                if game.name == "changed_printer" {
+                    changed_printer = true;
+                }
             }
         }
-        recursively_update_meta_games  = work_on_time && sleep_on_time && !clenches && !picks && played_20;
+        recursively_update_meta_games  = work_on_time && sleep_on_time && played_20 && left_in_peace && !changed_printer;
     }
 
     if recursively_update_meta_games {
@@ -175,7 +175,7 @@ fn print(s: String) {
         Ok(mut file) => file,
     };
 
-    let formatted = format!("\n{}\n", s);
+    let formatted = format!("\n{}\n\n\n", s); //3 at end so receipt rips nicely
     write_to
         .write_all(formatted.as_bytes())
         .expect("Unable to print");
