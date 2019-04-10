@@ -3,6 +3,7 @@ module Main exposing (main)
 import Browser exposing (document)
 import Debug
 import Element as E
+import Element.Font as Font
 import Html exposing (a, div, text)
 import Html.Attributes exposing (href)
 import Http
@@ -55,7 +56,7 @@ view model =
             E.link [] { url = "/" ++ game.name, label = E.text game.name }
 
         gamesView =
-            E.layout [] (E.column [] (List.map gameView activeGames))
+            E.layout [ Font.size 26 ] (E.column [] (List.map gameView activeGames))
     in
     { title = "Ludi"
     , body = [ gamesView ]

@@ -6848,8 +6848,8 @@ var author$project$Main$update = F2(
 					return _Debug_todo(
 						'Main',
 						{
-							start: {line: 74, column: 21},
-							end: {line: 74, column: 31}
+							start: {line: 75, column: 21},
+							end: {line: 75, column: 31}
 						})('What should I do if I can\'t parse games from the server?');
 				}
 			case 'ButtonPressed':
@@ -12395,6 +12395,12 @@ var mdgriffith$elm_ui$Internal$Model$Text = function (a) {
 var mdgriffith$elm_ui$Element$text = function (content) {
 	return mdgriffith$elm_ui$Internal$Model$Text(content);
 };
+var mdgriffith$elm_ui$Element$Font$size = function (i) {
+	return A2(
+		mdgriffith$elm_ui$Internal$Model$StyleClass,
+		mdgriffith$elm_ui$Internal$Flag$fontSize,
+		mdgriffith$elm_ui$Internal$Model$FontSize(i));
+};
 var author$project$Main$view = function (model) {
 	var gameView = function (game) {
 		return A2(
@@ -12426,7 +12432,10 @@ var author$project$Main$view = function (model) {
 	}();
 	var gamesView = A2(
 		mdgriffith$elm_ui$Element$layout,
-		_List_Nil,
+		_List_fromArray(
+			[
+				mdgriffith$elm_ui$Element$Font$size(26)
+			]),
 		A2(
 			mdgriffith$elm_ui$Element$column,
 			_List_Nil,
