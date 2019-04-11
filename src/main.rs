@@ -437,6 +437,7 @@ fn github_graph(g: &Game) -> View {
             .map(|d| d.with_timezone(&california).date())
             .collect::<Vec<Date<FixedOffset>>>();
         let today = now.with_timezone(&california).date();
+        let first_day= g.start.with_timezone(&california).date();
         let last_day = g.end.with_timezone(&california).date();
         let mut day_pointer = match dates.iter().min() {
             Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
@@ -456,6 +457,8 @@ fn github_graph(g: &Game) -> View {
                 output.push_str("X");
             } else if day_pointer == today {
                 output.push_str("O");
+            } else if day_pointer == first_day || day_pointer == last_day {
+                output.push_str("o");
             } else {
                 output.push_str("_");
             }
