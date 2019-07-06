@@ -57,7 +57,6 @@ cfg_if! {
     }
 }
 
-static mut SERVER_TIMEZONE_OFFSET : i32 = -7 * 3600;
 lazy_static! {
     // Reasons we're touching the model:
     // - To update it with a Msg (handled by update)
@@ -289,29 +288,6 @@ fn main() {
                     }
                 }
     };
-    let update_timezone = || {
-        let client = reqwest::Client::new();
-        let url = "http://worldtimeapi.org/api/ip";
-        let mut res = client.get(url).send().expect("Couldn't send request to worldtimeapi.org");
-
-        #[derive(Deserialize, Debug, Default)]
-        struct FetchedTimezoneOffset {
-            utc_offset: String,
-            timezone: String,
-            abbreviation: String
-        }
-
-        let response: FetchedTimezoneOffset = res.json().expect("Couldn't parse response from worldtimeapi.org");
-        //Chrono needs seconds, worldtimeapi.org gives us a string
-        //Below panics if offset isn't ascii
-        //And I'm not sure if it's +xx:xx when eastern hemisphere... 
-        //Lots to go wrong here.
-        let offset : i32 = response.utc_offset[0..2].parse().unwrap_or(-7); // California winter default, why not
-        unsafe { //Looks like we got a badass over here
-            SERVER_TIMEZONE_OFFSET = offset * 3600;
-        }
-        print(format!("Timezone at {} {} {}", response.abbreviation, response.timezone, response.utc_offset));
-    };
     let _check_ynab_api =
         move || {
             let client = reqwest::Client::new();
@@ -378,11 +354,9 @@ fn main() {
         print("The server stopped running!".to_owned());
     });
 
-    update_timezone();
-    cron.add(Job::new("0 0 1 * * *".parse().unwrap(), update_timezone));
     print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
     cron.add(Job::new(
-            "0 0 12 * * *".parse().unwrap(),
+            "0 0 12 * * *".parse().unwrap(), //Package users Greenwhich mean time. w/ dst should be 6:00?
             move || {
                 let tx1 = for_cron.lock().unwrap();
                 tx1.send(0).unwrap();
@@ -412,11 +386,9 @@ fn view_from_items(items: Vec<calendar3::Event>) -> View {
                         .expect("Couldn't parse into Naive Date");
                     let time = NaiveTime::from_hms(0, 0, 0);
                     let date_time = NaiveDateTime::new(date, time);
-                    unsafe {
-                        FixedOffset::east(SERVER_TIMEZONE_OFFSET)
-                            .from_local_datetime(&date_time)
-                            .unwrap()
-                    }
+                    FixedOffset::west(7 * 3600)
+                        .from_local_datetime(&date_time)
+                        .unwrap()
                 }
                 None => match &start.date_time {
                     Some(time) => {
@@ -457,22 +429,19 @@ fn github_graph(g: &Game) -> View {
      * I'll have to change this come daylights savings time
      * */
     let now = Local::now();
-    let timezone;
-    unsafe {
-        timezone =  FixedOffset::east(SERVER_TIMEZONE_OFFSET);
-    }
+    let california =  FixedOffset::west(7 * 3600); //TODO Fix for daylight savings
     if now < g.end && now > g.start {
         let dates = &g
             .events
             .iter()
-            .map(|d| d.with_timezone(&timezone).date())
+            .map(|d| d.with_timezone(&california).date())
             .collect::<Vec<Date<FixedOffset>>>();
-        let today = now.with_timezone(&timezone).date();
-        let first_day= g.start.with_timezone(&timezone).date();
-        let last_day = g.end.with_timezone(&timezone).date();
+        let today = now.with_timezone(&california).date();
+        let first_day= g.start.with_timezone(&california).date();
+        let last_day = g.end.with_timezone(&california).date();
         let mut day_pointer = match dates.iter().min() {
             Some(x) => x.clone(), //TODO why does clone() change the type here? //(Later) do I see a type error or a borrow error...
-            None => g.start.clone().with_timezone(&timezone).date()
+            None => g.start.clone().with_timezone(&california).date()
         };
         while day_pointer.weekday() != Sun {
             //Backup to sunday before game starts
@@ -480,7 +449,7 @@ fn github_graph(g: &Game) -> View {
         }
         let mut output = String::from(format!("Game /{}\n", &g.name));
         while day_pointer <= last_day{
-            //Walk through days till today 
+            //Walk through days till today
             if day_pointer.weekday() == Sun {
                 output.push_str("\n")
             }
