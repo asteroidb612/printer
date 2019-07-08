@@ -56,7 +56,7 @@ view model =
             E.link [] { url = "/" ++ game.name, label = E.text game.name }
 
         gamesView =
-            E.layout [ Font.size 26 ] (E.column [] (List.map gameView activeGames))
+            E.layout [ Font.size 100 ] (E.column [] (List.map gameView activeGames))
     in
     { title = "Ludi"
     , body = [ gamesView ]
