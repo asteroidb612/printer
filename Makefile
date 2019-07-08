@@ -19,3 +19,5 @@ game_two_uploaded:
   	&& curl -X POST https://de46adb5aefddd002ff3c4227d43b588.balena-devices.com/games/no_picks/6 \
   	&& curl -X POST https://de46adb5aefddd002ff3c4227d43b588.balena-devices.com/games/played_20/6 | jq '.' > game_two_uploaded
 
+clean: 
+	rm game_two_uploaded game_three_uploaded uploaded_game_file modified_game_file read_game_file
