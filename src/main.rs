@@ -124,11 +124,9 @@ fn update(msg: Msg) {
             }).expect("Writing on update failed");
 
         //Decide whether to update meta games
-        let mut work_on_time = false;
+        let mut worked_ninety = false;
         let mut sleep_on_time = false;
-        let mut left_in_peace = false;
-        let mut played_20 = false;
-        let mut changed_printer = false;
+        let mut prayed_st_francis = false;
 
         let today = Local::now().date();
         let weekday = today.weekday();
@@ -139,31 +137,25 @@ fn update(msg: Msg) {
                 None => false
             };
             if game_from_today {
-                if game.name == "Game_Two" {
+                if game.name == "Game_Three" {
                     return //Prevents infinite recursion
                 }
-                if game.name == "work_on_time" || weekday == Sat || weekday == Sun {
-                    work_on_time = true;
+                if game.name == "ninety_minutes_bike_or_deep_work" || weekday == Sat || weekday == Sun {
+                    worked_ninety = true;
                 }
-                if game.name == "sleep_on_time" || weekday == Sat || weekday == Fri {
+                if game.name == "bed_by_ten_thirty" || weekday == Sat || weekday == Fri {
                     sleep_on_time = true;
                 }
-                if game.name == "left_in_peace" || weekday == Sat || weekday == Sun {
-                    left_in_peace = true;
-                }
-                if game.name == "played_20" {
-                    played_20 = true;
-                }
-                if game.name == "changed_printer" {
-                    changed_printer = true;
+                if game.name == "prayed_st_francis" {
+                    prayed_st_francis = true;
                 }
             }
         }
-        recursively_update_meta_games  = work_on_time && sleep_on_time && played_20 && left_in_peace && !changed_printer;
+        recursively_update_meta_games  = worked_ninety && sleep_on_time && prayed_st_francis;
     }
 
     if recursively_update_meta_games {
-        update(Msg::GameOccurence("Game_Two".to_owned(), Local::now()));
+        update(Msg::GameOccurence("Game_Three".to_owned(), Local::now()));
     }
 }
 
@@ -279,7 +271,7 @@ fn main() {
                 .iter()
                 .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
                 {
-                    if game.name == "Game_Two" {
+                    if game.name == "Game_Three" {
                         print(github_graph(&game));
                         // Gradually layering games isn't thought through yet
                         //if consecutive_days(game) < 7 {
