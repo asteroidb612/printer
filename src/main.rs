@@ -569,6 +569,6 @@ fn _consecutive_days(g: &Game) -> i32 {
 fn try_print_moxie() {
     match Command::new("./query.sh").output(){
         Ok(s) => {print(String::from_utf8(s.stdout).unwrap())}
-        _ => ()
+        Err(e) => {println!("Error trying to fetch moxie: {:?}", e)}
     }
 }
