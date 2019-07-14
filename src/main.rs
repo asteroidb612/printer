@@ -42,6 +42,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::sync::mpsc;
 use std::io;
+use std::process::Command;
 
 cfg_if! {
     if #[cfg(target_os = "macos")] {
@@ -364,6 +365,7 @@ He fathers-forth whose beauty is past change:	        10
     });
 
     print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
+    try_print_moxie();
     cron.add(Job::new(
             "0 0 12 * * *".parse().unwrap(), //Package users Greenwhich mean time. w/ dst should be 6:00?
             move || {
@@ -371,6 +373,11 @@ He fathers-forth whose beauty is past change:	        10
                 tx1.send(0).unwrap();
             }
             ));
+    cron.add(Job::new(
+            "0 0 2 * * *".parse().unwrap(),
+            try_print_moxie
+            ));
+
     //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
     loop {
         cron.tick();
@@ -557,4 +564,11 @@ fn _consecutive_days(g: &Game) -> i32 {
         }
     }
     max
+}
+
+fn try_print_moxie() {
+    match Command::new("./query.sh").output(){
+        Ok(s) => {print(String::from_utf8(s.stdout).unwrap())}
+        _ => ()
+    }
 }
