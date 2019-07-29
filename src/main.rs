@@ -51,7 +51,8 @@ cfg_if! {
         static STORAGE: &str = "store.json";
         static TOKEN_STORAGE: &str = "token";
     } else {
-        static PRINTER_PATH: &str = "/dev/serial0";
+        static PRINTER_PATH: &str = "/dev/stdout";
+        //static PRINTER_PATH: &str = "/dev/serial0";
         static PORT: &str = "0.0.0.0:80";
         static STORAGE: &str = "/data/store.json";
         static TOKEN_STORAGE: &str = "/data/token";
