@@ -129,7 +129,9 @@ fn update(msg: Msg) {
         let mut sleep_on_time = false;
         let mut prayed_st_francis = false;
 
-        let today = Local::now().date();
+
+        let california = FixedOffset::west(7 * 3600); //TODO Fix for daylight savings
+        let today = Local::now().with_timezone(&california).date();
         let weekday = today.weekday();
         //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
         for game in model.games.clone() {
