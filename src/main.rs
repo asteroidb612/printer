@@ -132,26 +132,27 @@ fn update(msg: Msg) {
 
         let california = FixedOffset::west(7 * 3600); //TODO Fix for daylight savings
         let today = Local::now().with_timezone(&california).date();
-        let weekday = today.weekday();
         //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
         for game in model.games.clone() {
-            let game_from_today = match game.events.into_iter().last() {
-                Some(last_game) => last_game.date() == today,
-                None => false
-            };
-            if game_from_today {
-                if game.name == "Game_Three" {
-                    return //Prevents infinite recursion
-                }
-                if game.name == "ninety_minutes_bike_or_deep_work" || weekday == Sat || weekday == Sun {
-                    worked_ninety = true;
-                }
-                if game.name == "bed_by_ten_thirty" || weekday == Sat || weekday == Fri {
-                    sleep_on_time = true;
-                }
-                if game.name == "prayed_st_francis" {
-                    prayed_st_francis = true;
-                }
+            match game.events.into_iter().last() {
+                Some(most_recent_game) => {
+                    if most_recent_game.date() == today { //Still necessary b/c meta game structure? Rather than events
+                        let weekday = most_recent_game.with_timezone(&california).date().weekday();
+                        if game.name == "Game_Three" {
+                            return //Prevents infinite recursion
+                        }
+                        if game.name == "ninety_minutes_bike_or_deep_work" || weekday == Sat || weekday == Sun {
+                            worked_ninety = true;
+                        }
+                        if game.name == "bed_by_ten_thirty" || weekday == Sat || weekday == Fri {
+                            sleep_on_time = true;
+                        }
+                        if game.name == "prayed_st_francis" {
+                            prayed_st_francis = true;
+                        }
+                    }
+                },
+                None => {}
             }
         }
         recursively_update_meta_games  = worked_ninety && sleep_on_time && prayed_st_francis;
