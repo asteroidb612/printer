@@ -1,6 +1,8 @@
 module Main exposing (main)
 
 import Browser exposing (document)
+import Clock
+import DateTime
 import Debug
 import Element as E
 import Element.Font as Font
@@ -10,6 +12,7 @@ import Http
 import Iso8601
 import Json.Decode as D
 import List exposing (map)
+import List.Extra
 import Task
 import Time exposing (Posix)
 
@@ -42,25 +45,52 @@ type Msg
     | ButtonPressed
 
 
-view model =
+attrs : Game -> DateTime.DateTime -> List (E.Attribute Msg)
+attrs game start =
     let
-        activeGames =
-            case ( model.games, model.now ) of
-                ( Just games, Just now ) ->
+        datetimes =
+            List.map DateTime.fromPosix game.events
+    in
+    case List.Extra.maximumWith DateTime.compare datetimes of
+        Just mostRecent ->
+            case DateTime.compare mostRecent start of
+                GT ->
+                    [ Font.size 50 ]
+
+                LT ->
+                    [ Font.size 100 ]
+
+                EQ ->
+                    [ Font.size 50 ]
+
+        Nothing ->
+            []
+
+
+view : Model -> Browser.Document Msg
+view model =
+    case ( model.games, model.now ) of
+        ( Just games, Just now ) ->
+            let
+                activeGames =
                     List.filter (\game -> Time.posixToMillis game.start < Time.posixToMillis now && Time.posixToMillis game.end > Time.posixToMillis now) games
 
-                _ ->
-                    []
+                gameView game =
+                    let
+                        startOfDay =
+                            DateTime.setTime Clock.midnight (DateTime.fromPosix now)
+                    in
+                    E.link (attrs game startOfDay) { url = "/" ++ game.name, label = E.text game.name }
 
-        gameView game =
-            E.link [] { url = "/" ++ game.name, label = E.text game.name }
+                gamesView =
+                    E.layout [] (E.column [] (List.map gameView activeGames))
+            in
+            { title = "Ludi"
+            , body = [ gamesView ]
+            }
 
-        gamesView =
-            E.layout [ Font.size 100 ] (E.column [] (List.map gameView activeGames))
-    in
-    { title = "Ludi"
-    , body = [ gamesView ]
-    }
+        _ ->
+            { title = "Loading", body = [] }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

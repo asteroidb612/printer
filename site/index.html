@@ -2675,6 +2675,43 @@ function _Time_getZoneName()
 
 
 
+var _Bitwise_and = F2(function(a, b)
+{
+	return a & b;
+});
+
+var _Bitwise_or = F2(function(a, b)
+{
+	return a | b;
+});
+
+var _Bitwise_xor = F2(function(a, b)
+{
+	return a ^ b;
+});
+
+function _Bitwise_complement(a)
+{
+	return ~a;
+};
+
+var _Bitwise_shiftLeftBy = F2(function(offset, a)
+{
+	return a << offset;
+});
+
+var _Bitwise_shiftRightBy = F2(function(offset, a)
+{
+	return a >> offset;
+});
+
+var _Bitwise_shiftRightZfBy = F2(function(offset, a)
+{
+	return a >>> offset;
+});
+
+
+
 
 // HELPERS
 
@@ -4230,43 +4267,6 @@ function _VirtualDom_dekey(keyedNode)
 		b: keyedNode.b
 	};
 }
-
-
-
-var _Bitwise_and = F2(function(a, b)
-{
-	return a & b;
-});
-
-var _Bitwise_or = F2(function(a, b)
-{
-	return a | b;
-});
-
-var _Bitwise_xor = F2(function(a, b)
-{
-	return a ^ b;
-});
-
-function _Bitwise_complement(a)
-{
-	return ~a;
-};
-
-var _Bitwise_shiftLeftBy = F2(function(offset, a)
-{
-	return a << offset;
-});
-
-var _Bitwise_shiftRightBy = F2(function(offset, a)
-{
-	return a >> offset;
-});
-
-var _Bitwise_shiftRightZfBy = F2(function(offset, a)
-{
-	return a >>> offset;
-});
 
 
 
@@ -6848,8 +6848,8 @@ var author$project$Main$update = F2(
 					return _Debug_todo(
 						'Main',
 						{
-							start: {line: 75, column: 21},
-							end: {line: 75, column: 31}
+							start: {line: 105, column: 21},
+							end: {line: 105, column: 31}
 						})('What should I do if I can\'t parse games from the server?');
 				}
 			case 'ButtonPressed':
@@ -6865,6 +6865,492 @@ var author$project$Main$update = F2(
 					elm$core$Platform$Cmd$none);
 		}
 	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Hour = function (a) {
+	return {$: 'Hour', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Millisecond = function (a) {
+	return {$: 'Millisecond', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Minute = function (a) {
+	return {$: 'Minute', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Second = function (a) {
+	return {$: 'Second', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Time = function (a) {
+	return {$: 'Time', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$midnight = PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Time(
+	{
+		hours: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Hour(0),
+		milliseconds: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Millisecond(0),
+		minutes: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Minute(0),
+		seconds: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Second(0)
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$midnight = PanagiotisGeorgiadis$elm_datetime$Clock$Internal$midnight;
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$Date = function (a) {
+	return {$: 'Date', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$Day = function (a) {
+	return {$: 'Day', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$Year = function (a) {
+	return {$: 'Year', a: a};
+};
+var elm$time$Time$flooredDiv = F2(
+	function (numerator, denominator) {
+		return elm$core$Basics$floor(numerator / denominator);
+	});
+var elm$time$Time$posixToMillis = function (_n0) {
+	var millis = _n0.a;
+	return millis;
+};
+var elm$time$Time$toAdjustedMinutesHelp = F3(
+	function (defaultOffset, posixMinutes, eras) {
+		toAdjustedMinutesHelp:
+		while (true) {
+			if (!eras.b) {
+				return posixMinutes + defaultOffset;
+			} else {
+				var era = eras.a;
+				var olderEras = eras.b;
+				if (_Utils_cmp(era.start, posixMinutes) < 0) {
+					return posixMinutes + era.offset;
+				} else {
+					var $temp$defaultOffset = defaultOffset,
+						$temp$posixMinutes = posixMinutes,
+						$temp$eras = olderEras;
+					defaultOffset = $temp$defaultOffset;
+					posixMinutes = $temp$posixMinutes;
+					eras = $temp$eras;
+					continue toAdjustedMinutesHelp;
+				}
+			}
+		}
+	});
+var elm$time$Time$toAdjustedMinutes = F2(
+	function (_n0, time) {
+		var defaultOffset = _n0.a;
+		var eras = _n0.b;
+		return A3(
+			elm$time$Time$toAdjustedMinutesHelp,
+			defaultOffset,
+			A2(
+				elm$time$Time$flooredDiv,
+				elm$time$Time$posixToMillis(time),
+				60000),
+			eras);
+	});
+var elm$core$Basics$ge = _Utils_ge;
+var elm$time$Time$toCivil = function (minutes) {
+	var rawDay = A2(elm$time$Time$flooredDiv, minutes, 60 * 24) + 719468;
+	var era = (((rawDay >= 0) ? rawDay : (rawDay - 146096)) / 146097) | 0;
+	var dayOfEra = rawDay - (era * 146097);
+	var yearOfEra = ((((dayOfEra - ((dayOfEra / 1460) | 0)) + ((dayOfEra / 36524) | 0)) - ((dayOfEra / 146096) | 0)) / 365) | 0;
+	var dayOfYear = dayOfEra - (((365 * yearOfEra) + ((yearOfEra / 4) | 0)) - ((yearOfEra / 100) | 0));
+	var mp = (((5 * dayOfYear) + 2) / 153) | 0;
+	var month = mp + ((mp < 10) ? 3 : (-9));
+	var year = yearOfEra + (era * 400);
+	return {
+		day: (dayOfYear - ((((153 * mp) + 2) / 5) | 0)) + 1,
+		month: month,
+		year: year + ((month <= 2) ? 1 : 0)
+	};
+};
+var elm$time$Time$toDay = F2(
+	function (zone, time) {
+		return elm$time$Time$toCivil(
+			A2(elm$time$Time$toAdjustedMinutes, zone, time)).day;
+	});
+var elm$time$Time$Apr = {$: 'Apr'};
+var elm$time$Time$Aug = {$: 'Aug'};
+var elm$time$Time$Dec = {$: 'Dec'};
+var elm$time$Time$Feb = {$: 'Feb'};
+var elm$time$Time$Jan = {$: 'Jan'};
+var elm$time$Time$Jul = {$: 'Jul'};
+var elm$time$Time$Jun = {$: 'Jun'};
+var elm$time$Time$Mar = {$: 'Mar'};
+var elm$time$Time$May = {$: 'May'};
+var elm$time$Time$Nov = {$: 'Nov'};
+var elm$time$Time$Oct = {$: 'Oct'};
+var elm$time$Time$Sep = {$: 'Sep'};
+var elm$time$Time$toMonth = F2(
+	function (zone, time) {
+		var _n0 = elm$time$Time$toCivil(
+			A2(elm$time$Time$toAdjustedMinutes, zone, time)).month;
+		switch (_n0) {
+			case 1:
+				return elm$time$Time$Jan;
+			case 2:
+				return elm$time$Time$Feb;
+			case 3:
+				return elm$time$Time$Mar;
+			case 4:
+				return elm$time$Time$Apr;
+			case 5:
+				return elm$time$Time$May;
+			case 6:
+				return elm$time$Time$Jun;
+			case 7:
+				return elm$time$Time$Jul;
+			case 8:
+				return elm$time$Time$Aug;
+			case 9:
+				return elm$time$Time$Sep;
+			case 10:
+				return elm$time$Time$Oct;
+			case 11:
+				return elm$time$Time$Nov;
+			default:
+				return elm$time$Time$Dec;
+		}
+	});
+var elm$time$Time$toYear = F2(
+	function (zone, time) {
+		return elm$time$Time$toCivil(
+			A2(elm$time$Time$toAdjustedMinutes, zone, time)).year;
+	});
+var elm$time$Time$utc = A2(elm$time$Time$Zone, 0, _List_Nil);
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$fromPosix = function (posix) {
+	return PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$Date(
+		{
+			day: PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$Day(
+				A2(elm$time$Time$toDay, elm$time$Time$utc, posix)),
+			month: A2(elm$time$Time$toMonth, elm$time$Time$utc, posix),
+			year: PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$Year(
+				A2(elm$time$Time$toYear, elm$time$Time$utc, posix))
+		});
+};
+var elm$time$Time$toHour = F2(
+	function (zone, time) {
+		return A2(
+			elm$core$Basics$modBy,
+			24,
+			A2(
+				elm$time$Time$flooredDiv,
+				A2(elm$time$Time$toAdjustedMinutes, zone, time),
+				60));
+	});
+var elm$time$Time$toMillis = F2(
+	function (_n0, time) {
+		return A2(
+			elm$core$Basics$modBy,
+			1000,
+			elm$time$Time$posixToMillis(time));
+	});
+var elm$time$Time$toMinute = F2(
+	function (zone, time) {
+		return A2(
+			elm$core$Basics$modBy,
+			60,
+			A2(elm$time$Time$toAdjustedMinutes, zone, time));
+	});
+var elm$time$Time$toSecond = F2(
+	function (_n0, time) {
+		return A2(
+			elm$core$Basics$modBy,
+			60,
+			A2(
+				elm$time$Time$flooredDiv,
+				elm$time$Time$posixToMillis(time),
+				1000));
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$fromPosix = function (posix) {
+	return PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Time(
+		{
+			hours: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Hour(
+				A2(elm$time$Time$toHour, elm$time$Time$utc, posix)),
+			milliseconds: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Millisecond(
+				A2(elm$time$Time$toMillis, elm$time$Time$utc, posix)),
+			minutes: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Minute(
+				A2(elm$time$Time$toMinute, elm$time$Time$utc, posix)),
+			seconds: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$Second(
+				A2(elm$time$Time$toSecond, elm$time$Time$utc, posix))
+		});
+};
+var PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$DateTime = function (a) {
+	return {$: 'DateTime', a: a};
+};
+var PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$fromPosix = function (timePosix) {
+	return PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$DateTime(
+		{
+			date: PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$fromPosix(timePosix),
+			time: PanagiotisGeorgiadis$elm_datetime$Clock$Internal$fromPosix(timePosix)
+		});
+};
+var PanagiotisGeorgiadis$elm_datetime$DateTime$fromPosix = PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$fromPosix;
+var PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$setTime = F2(
+	function (time, _n0) {
+		var date = _n0.a.date;
+		return PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$DateTime(
+			{date: date, time: time});
+	});
+var PanagiotisGeorgiadis$elm_datetime$DateTime$setTime = PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$setTime;
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$dayToInt = function (_n0) {
+	var day = _n0.a;
+	return day;
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compareDays = F2(
+	function (lhs, rhs) {
+		return A2(
+			elm$core$Basics$compare,
+			PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$dayToInt(lhs),
+			PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$dayToInt(rhs));
+	});
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$monthToInt = function (month) {
+	switch (month.$) {
+		case 'Jan':
+			return 1;
+		case 'Feb':
+			return 2;
+		case 'Mar':
+			return 3;
+		case 'Apr':
+			return 4;
+		case 'May':
+			return 5;
+		case 'Jun':
+			return 6;
+		case 'Jul':
+			return 7;
+		case 'Aug':
+			return 8;
+		case 'Sep':
+			return 9;
+		case 'Oct':
+			return 10;
+		case 'Nov':
+			return 11;
+		default:
+			return 12;
+	}
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compareMonths = F2(
+	function (lhs, rhs) {
+		return A2(
+			elm$core$Basics$compare,
+			PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$monthToInt(lhs),
+			PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$monthToInt(rhs));
+	});
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$yearToInt = function (_n0) {
+	var year = _n0.a;
+	return year;
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compareYears = F2(
+	function (lhs, rhs) {
+		return A2(
+			elm$core$Basics$compare,
+			PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$yearToInt(lhs),
+			PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$yearToInt(rhs));
+	});
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getDay = function (_n0) {
+	var date = _n0.a;
+	return date.day;
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getMonth = function (_n0) {
+	var month = _n0.a.month;
+	return month;
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getYear = function (_n0) {
+	var year = _n0.a.year;
+	return year;
+};
+var PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compare = F2(
+	function (lhs, rhs) {
+		var _n0 = _Utils_Tuple3(
+			A2(
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compareYears,
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getYear(lhs),
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getYear(rhs)),
+			A2(
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compareMonths,
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getMonth(lhs),
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getMonth(rhs)),
+			A2(
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compareDays,
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getDay(lhs),
+				PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$getDay(rhs)));
+		var yearsComparison = _n0.a;
+		var monthsComparison = _n0.b;
+		var daysComparison = _n0.c;
+		if (yearsComparison.$ === 'EQ') {
+			if (monthsComparison.$ === 'EQ') {
+				return daysComparison;
+			} else {
+				return monthsComparison;
+			}
+		} else {
+			return yearsComparison;
+		}
+	});
+var PanagiotisGeorgiadis$elm_datetime$Calendar$compare = PanagiotisGeorgiadis$elm_datetime$Calendar$Internal$compare;
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareHours = F2(
+	function (_n0, _n1) {
+		var lhs = _n0.a;
+		var rhs = _n1.a;
+		return A2(elm$core$Basics$compare, lhs, rhs);
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareMilliseconds = F2(
+	function (_n0, _n1) {
+		var lhs = _n0.a;
+		var rhs = _n1.a;
+		return A2(elm$core$Basics$compare, lhs, rhs);
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareMinutes = F2(
+	function (_n0, _n1) {
+		var lhs = _n0.a;
+		var rhs = _n1.a;
+		return A2(elm$core$Basics$compare, lhs, rhs);
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareSeconds = F2(
+	function (_n0, _n1) {
+		var lhs = _n0.a;
+		var rhs = _n1.a;
+		return A2(elm$core$Basics$compare, lhs, rhs);
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getHours = function (_n0) {
+	var hours = _n0.a.hours;
+	return hours;
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getMilliseconds = function (_n0) {
+	var milliseconds = _n0.a.milliseconds;
+	return milliseconds;
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getMinutes = function (_n0) {
+	var minutes = _n0.a.minutes;
+	return minutes;
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getSeconds = function (_n0) {
+	var seconds = _n0.a.seconds;
+	return seconds;
+};
+var PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compare = F2(
+	function (lhs, rhs) {
+		var _n0 = _Utils_Tuple3(
+			A2(
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareHours,
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getHours(lhs),
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getHours(rhs)),
+			A2(
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareMinutes,
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getMinutes(lhs),
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getMinutes(rhs)),
+			A2(
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareSeconds,
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getSeconds(lhs),
+				PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getSeconds(rhs)));
+		var hoursComparison = _n0.a;
+		var minutesComparison = _n0.b;
+		var secondsComparison = _n0.c;
+		if (hoursComparison.$ === 'EQ') {
+			if (minutesComparison.$ === 'EQ') {
+				if (secondsComparison.$ === 'EQ') {
+					return A2(
+						PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compareMilliseconds,
+						PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getMilliseconds(lhs),
+						PanagiotisGeorgiadis$elm_datetime$Clock$Internal$getMilliseconds(rhs));
+				} else {
+					return secondsComparison;
+				}
+			} else {
+				return minutesComparison;
+			}
+		} else {
+			return hoursComparison;
+		}
+	});
+var PanagiotisGeorgiadis$elm_datetime$Clock$compare = PanagiotisGeorgiadis$elm_datetime$Clock$Internal$compare;
+var PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$compare = F2(
+	function (_n0, _n1) {
+		var lhs = _n0.a;
+		var rhs = _n1.a;
+		var _n2 = A2(PanagiotisGeorgiadis$elm_datetime$Calendar$compare, lhs.date, rhs.date);
+		if (_n2.$ === 'EQ') {
+			return A2(PanagiotisGeorgiadis$elm_datetime$Clock$compare, lhs.time, rhs.time);
+		} else {
+			var ord = _n2;
+			return ord;
+		}
+	});
+var PanagiotisGeorgiadis$elm_datetime$DateTime$compare = PanagiotisGeorgiadis$elm_datetime$DateTime$Internal$compare;
+var elm_community$list_extra$List$Extra$foldl1 = F2(
+	function (func, list) {
+		if (!list.b) {
+			return elm$core$Maybe$Nothing;
+		} else {
+			var x = list.a;
+			var xs = list.b;
+			return elm$core$Maybe$Just(
+				A3(elm$core$List$foldl, func, x, xs));
+		}
+	});
+var elm_community$list_extra$List$Extra$maximumWith = F2(
+	function (comparator, list) {
+		return A2(
+			elm_community$list_extra$List$Extra$foldl1,
+			F2(
+				function (x, y) {
+					var _n0 = A2(comparator, x, y);
+					if (_n0.$ === 'GT') {
+						return x;
+					} else {
+						return y;
+					}
+				}),
+			list);
+	});
+var elm$core$Bitwise$shiftLeftBy = _Bitwise_shiftLeftBy;
+var mdgriffith$elm_ui$Internal$Flag$Flag = function (a) {
+	return {$: 'Flag', a: a};
+};
+var mdgriffith$elm_ui$Internal$Flag$Second = function (a) {
+	return {$: 'Second', a: a};
+};
+var mdgriffith$elm_ui$Internal$Flag$flag = function (i) {
+	return (i > 31) ? mdgriffith$elm_ui$Internal$Flag$Second(1 << (i - 32)) : mdgriffith$elm_ui$Internal$Flag$Flag(1 << i);
+};
+var mdgriffith$elm_ui$Internal$Flag$fontSize = mdgriffith$elm_ui$Internal$Flag$flag(4);
+var mdgriffith$elm_ui$Internal$Model$FontSize = function (a) {
+	return {$: 'FontSize', a: a};
+};
+var mdgriffith$elm_ui$Internal$Model$StyleClass = F2(
+	function (a, b) {
+		return {$: 'StyleClass', a: a, b: b};
+	});
+var mdgriffith$elm_ui$Element$Font$size = function (i) {
+	return A2(
+		mdgriffith$elm_ui$Internal$Model$StyleClass,
+		mdgriffith$elm_ui$Internal$Flag$fontSize,
+		mdgriffith$elm_ui$Internal$Model$FontSize(i));
+};
+var author$project$Main$attrs = F2(
+	function (game, start) {
+		var datetimes = A2(elm$core$List$map, PanagiotisGeorgiadis$elm_datetime$DateTime$fromPosix, game.events);
+		var _n0 = A2(elm_community$list_extra$List$Extra$maximumWith, PanagiotisGeorgiadis$elm_datetime$DateTime$compare, datetimes);
+		if (_n0.$ === 'Just') {
+			var mostRecent = _n0.a;
+			var _n1 = A2(PanagiotisGeorgiadis$elm_datetime$DateTime$compare, mostRecent, start);
+			switch (_n1.$) {
+				case 'GT':
+					return _List_fromArray(
+						[
+							mdgriffith$elm_ui$Element$Font$size(50)
+						]);
+				case 'LT':
+					return _List_fromArray(
+						[
+							mdgriffith$elm_ui$Element$Font$size(100)
+						]);
+				default:
+					return _List_fromArray(
+						[
+							mdgriffith$elm_ui$Element$Font$size(50)
+						]);
+			}
+		} else {
+			return _List_Nil;
+		}
+	});
 var elm$core$List$filter = F2(
 	function (isGood, list) {
 		return A3(
@@ -6876,10 +7362,6 @@ var elm$core$List$filter = F2(
 			_List_Nil,
 			list);
 	});
-var elm$time$Time$posixToMillis = function (_n0) {
-	var millis = _n0.a;
-	return millis;
-};
 var mdgriffith$elm_ui$Internal$Model$Height = function (a) {
 	return {$: 'Height', a: a};
 };
@@ -7045,16 +7527,6 @@ var elm$virtual_dom$VirtualDom$keyedNode = function (tag) {
 var elm$virtual_dom$VirtualDom$node = function (tag) {
 	return _VirtualDom_node(
 		_VirtualDom_noScript(tag));
-};
-var elm$core$Bitwise$shiftLeftBy = _Bitwise_shiftLeftBy;
-var mdgriffith$elm_ui$Internal$Flag$Flag = function (a) {
-	return {$: 'Flag', a: a};
-};
-var mdgriffith$elm_ui$Internal$Flag$Second = function (a) {
-	return {$: 'Second', a: a};
-};
-var mdgriffith$elm_ui$Internal$Flag$flag = function (i) {
-	return (i > 31) ? mdgriffith$elm_ui$Internal$Flag$Second(1 << (i - 32)) : mdgriffith$elm_ui$Internal$Flag$Flag(1 << i);
 };
 var mdgriffith$elm_ui$Internal$Flag$alignBottom = mdgriffith$elm_ui$Internal$Flag$flag(41);
 var mdgriffith$elm_ui$Internal$Flag$alignRight = mdgriffith$elm_ui$Internal$Flag$flag(40);
@@ -11111,7 +11583,6 @@ var mdgriffith$elm_ui$Internal$Model$renderWidth = function (w) {
 				A2(elm$core$List$cons, style, newStyle));
 	}
 };
-var elm$core$Basics$ge = _Utils_ge;
 var mdgriffith$elm_ui$Internal$Flag$borderWidth = mdgriffith$elm_ui$Internal$Flag$flag(27);
 var mdgriffith$elm_ui$Internal$Model$skippable = F2(
 	function (flag, style) {
@@ -12226,7 +12697,6 @@ var mdgriffith$elm_ui$Internal$Model$renderRoot = F3(
 var mdgriffith$elm_ui$Internal$Flag$bgColor = mdgriffith$elm_ui$Internal$Flag$flag(8);
 var mdgriffith$elm_ui$Internal$Flag$fontColor = mdgriffith$elm_ui$Internal$Flag$flag(14);
 var mdgriffith$elm_ui$Internal$Flag$fontFamily = mdgriffith$elm_ui$Internal$Flag$flag(5);
-var mdgriffith$elm_ui$Internal$Flag$fontSize = mdgriffith$elm_ui$Internal$Flag$flag(4);
 var mdgriffith$elm_ui$Internal$Model$Colored = F3(
 	function (a, b, c) {
 		return {$: 'Colored', a: a, b: b, c: c};
@@ -12235,14 +12705,7 @@ var mdgriffith$elm_ui$Internal$Model$FontFamily = F2(
 	function (a, b) {
 		return {$: 'FontFamily', a: a, b: b};
 	});
-var mdgriffith$elm_ui$Internal$Model$FontSize = function (a) {
-	return {$: 'FontSize', a: a};
-};
 var mdgriffith$elm_ui$Internal$Model$SansSerif = {$: 'SansSerif'};
-var mdgriffith$elm_ui$Internal$Model$StyleClass = F2(
-	function (a, b) {
-		return {$: 'StyleClass', a: a, b: b};
-	});
 var mdgriffith$elm_ui$Internal$Model$Typeface = function (a) {
 	return {$: 'Typeface', a: a};
 };
@@ -12395,56 +12858,49 @@ var mdgriffith$elm_ui$Internal$Model$Text = function (a) {
 var mdgriffith$elm_ui$Element$text = function (content) {
 	return mdgriffith$elm_ui$Internal$Model$Text(content);
 };
-var mdgriffith$elm_ui$Element$Font$size = function (i) {
-	return A2(
-		mdgriffith$elm_ui$Internal$Model$StyleClass,
-		mdgriffith$elm_ui$Internal$Flag$fontSize,
-		mdgriffith$elm_ui$Internal$Model$FontSize(i));
-};
 var author$project$Main$view = function (model) {
-	var gameView = function (game) {
-		return A2(
-			mdgriffith$elm_ui$Element$link,
-			_List_Nil,
-			{
-				label: mdgriffith$elm_ui$Element$text(game.name),
-				url: '/' + game.name
-			});
-	};
-	var activeGames = function () {
-		var _n0 = _Utils_Tuple2(model.games, model.now);
-		if ((_n0.a.$ === 'Just') && (_n0.b.$ === 'Just')) {
-			var games = _n0.a.a;
-			var now = _n0.b.a;
+	var _n0 = _Utils_Tuple2(model.games, model.now);
+	if ((_n0.a.$ === 'Just') && (_n0.b.$ === 'Just')) {
+		var games = _n0.a.a;
+		var now = _n0.b.a;
+		var gameView = function (game) {
+			var startOfDay = A2(
+				PanagiotisGeorgiadis$elm_datetime$DateTime$setTime,
+				PanagiotisGeorgiadis$elm_datetime$Clock$midnight,
+				PanagiotisGeorgiadis$elm_datetime$DateTime$fromPosix(now));
 			return A2(
-				elm$core$List$filter,
-				function (game) {
-					return (_Utils_cmp(
-						elm$time$Time$posixToMillis(game.start),
-						elm$time$Time$posixToMillis(now)) < 0) && (_Utils_cmp(
-						elm$time$Time$posixToMillis(game.end),
-						elm$time$Time$posixToMillis(now)) > 0);
-				},
-				games);
-		} else {
-			return _List_Nil;
-		}
-	}();
-	var gamesView = A2(
-		mdgriffith$elm_ui$Element$layout,
-		_List_fromArray(
-			[
-				mdgriffith$elm_ui$Element$Font$size(100)
-			]),
-		A2(
-			mdgriffith$elm_ui$Element$column,
+				mdgriffith$elm_ui$Element$link,
+				A2(author$project$Main$attrs, game, startOfDay),
+				{
+					label: mdgriffith$elm_ui$Element$text(game.name),
+					url: '/' + game.name
+				});
+		};
+		var activeGames = A2(
+			elm$core$List$filter,
+			function (game) {
+				return (_Utils_cmp(
+					elm$time$Time$posixToMillis(game.start),
+					elm$time$Time$posixToMillis(now)) < 0) && (_Utils_cmp(
+					elm$time$Time$posixToMillis(game.end),
+					elm$time$Time$posixToMillis(now)) > 0);
+			},
+			games);
+		var gamesView = A2(
+			mdgriffith$elm_ui$Element$layout,
 			_List_Nil,
-			A2(elm$core$List$map, gameView, activeGames)));
-	return {
-		body: _List_fromArray(
-			[gamesView]),
-		title: 'Ludi'
-	};
+			A2(
+				mdgriffith$elm_ui$Element$column,
+				_List_Nil,
+				A2(elm$core$List$map, gameView, activeGames)));
+		return {
+			body: _List_fromArray(
+				[gamesView]),
+			title: 'Ludi'
+		};
+	} else {
+		return {body: _List_Nil, title: 'Loading'};
+	}
 };
 var elm$browser$Browser$External = function (a) {
 	return {$: 'External', a: a};
