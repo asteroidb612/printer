@@ -44,6 +44,11 @@ use std::sync::mpsc;
 use std::io;
 use std::process::Command;
 
+
+
+// Globals
+
+
 cfg_if! {
     if #[cfg(target_os = "macos")] {
         static PRINTER_PATH: &str = "/dev/stdout";
@@ -57,6 +62,7 @@ cfg_if! {
         static TOKEN_STORAGE: &str = "/data/token";
     }
 }
+
 
 lazy_static! {
     // Reasons we're touching the model:
@@ -80,101 +86,6 @@ fn serialized_view() -> String {
 
 fn view() -> Model {
     MODEL.lock().unwrap().to_owned()
-}
-
-fn update(msg: Msg) {
-    //Scope to prevent deadlock on recursion
-    let recursively_update_meta_games;
-    { 
-        let mut model = MODEL.lock().unwrap();
-        let now = Local::now();
-
-        //Update
-        match msg {
-            Msg::GameOccurence(occurrence_name, time) =>{  
-                let games = &mut model.games;
-                for ref mut game in games {  //We want ref to games, not the iterator
-                    if game.name == occurrence_name && game.end > now {
-                        let events = &mut game.events;
-                        events.push(time);
-                    }
-                }
-            },
-            Msg::GameCreate(name, start, end) => {
-                let new_game = Game {
-                    name: name,
-                    start: start,
-                    end: end,
-                    events: vec![],
-                };
-                model.games.push(new_game);
-            },
-            Msg::Replace(new_model) => {
-                let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
-                std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
-                *model = new_model;
-            },
-        }
-
-        // Persistence
-        serde_json::to_string(&*model) //&* because rust doesn't auto reference, only auto deref
-            .map_err(|serde_err|{ io::Error::new(io::ErrorKind::Other, serde_err)}).and_then(|serialized|{
-                let mut file = File::create(Path::new(STORAGE))?;
-                file.write_all(serialized.as_bytes())?;
-                Ok(())
-            }).expect("Writing on update failed");
-
-        //Decide whether to update meta games
-        let mut worked_ninety = false;
-        let mut sleep_on_time = false;
-        let mut prayed_st_francis = false;
-
-
-        let california = FixedOffset::west(7 * 3600); //TODO Fix for daylight savings
-        let today = Local::now().with_timezone(&california).date();
-        //Fixes "cannot move out of borrowed content" https://stackoverflow.com/questions/40862191/cannot-move-out-of-borrowed-content-when-iterating-the-loop
-        for game in model.games.clone() {
-            match game.events.into_iter().last() {
-                Some(most_recent_game) => {
-                    if most_recent_game.date() == today { //Still necessary b/c meta game structure? Rather than events
-                        let weekday = most_recent_game.with_timezone(&california).date().weekday();
-                        if game.name == "Game_Three" {
-                            return //Prevents infinite recursion
-                        }
-                        if game.name == "ninety_minutes_bike_or_deep_work" || weekday == Sat || weekday == Sun {
-                            worked_ninety = true;
-                        }
-                        if game.name == "bed_by_ten_thirty" || weekday == Sat || weekday == Fri {
-                            sleep_on_time = true;
-                        }
-                        if game.name == "prayed_st_francis" {
-                            prayed_st_francis = true;
-                        }
-                    }
-                },
-                None => {}
-            }
-        }
-        recursively_update_meta_games  = worked_ninety && sleep_on_time && prayed_st_francis;
-    }
-
-    if recursively_update_meta_games {
-        update(Msg::GameOccurence("Game_Three".to_owned(), Local::now()));
-    }
-}
-
-
-fn print(s: String) {
-    let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
-        //I have a lot of good case studies in here for moving/borrowing... this is one...
-        Err(why) => panic!("couldn't create file in write-only mode: {}", why),
-        Ok(mut file) => file,
-    };
-
-    let formatted = format!("\n{}\n\n\n", s); //3 at end so receipt rips nicely
-    write_to
-        .write_all(formatted.as_bytes())
-        .expect("Unable to print");
 }
 
 fn secret() -> oauth2::ApplicationSecret {
@@ -201,6 +112,73 @@ fn setup() {
             .expect("Couldn't write to serial port");
     }
 }
+
+
+
+
+// Update
+
+
+fn update(msg: Msg) {
+    let mut model = MODEL.lock().unwrap();
+    let now = Local::now();
+
+    //Update
+    match msg {
+        Msg::GameOccurence(occurrence_name, time) =>{  
+            let games = &mut model.games;
+            for ref mut game in games {  //We want ref to games, not the iterator
+                if game.name == occurrence_name && game.end > now {
+                    let events = &mut game.events;
+                    events.push(time);
+                }
+            }
+        },
+        Msg::GameCreate(name, start, end) => {
+            let new_game = Game {
+                name: name,
+                start: start,
+                end: end,
+                events: vec![],
+                part_of: None,
+                skipping: None 
+            };
+            model.games.push(new_game);
+        },
+        Msg::Replace(new_model) => {
+            let backup_name = format!("/data/backup {} store.json", Local::now().timestamp());
+            std::fs::copy(STORAGE, &backup_name).expect("Copying backup store.json failed");
+            *model = new_model;
+        },
+    }
+
+    // Persistence
+    serde_json::to_string(&*model) //&* because rust doesn't auto reference, only auto deref
+        .map_err(|serde_err|{ io::Error::new(io::ErrorKind::Other, serde_err)}).and_then(|serialized|{
+            let mut file = File::create(Path::new(STORAGE))?;
+            file.write_all(serialized.as_bytes())?;
+            Ok(())
+        }).expect("Writing on update failed");
+}
+
+
+fn print(s: String) {
+    let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
+        //I have a lot of good case studies in here for moving/borrowing... this is one...
+        Err(why) => panic!("couldn't create file in write-only mode: {}", why),
+        Ok(mut file) => file,
+    };
+
+    let formatted = format!("\n{}\n\n\n", s); //3 at end so receipt rips nicely
+    write_to
+        .write_all(formatted.as_bytes())
+        .expect("Unable to print");
+}
+
+
+
+// Main
+
 
 fn main() {
     setup();
@@ -271,18 +249,10 @@ fn main() {
             };
         }
         print(format!("{}", view_from_items(all_events)));
-        for game in view().games
-                .iter()
-                .sorted_by(|a, b| Ord::cmp(&b.start, &a.start))
-                {
-                    if game.name == "Game_Three" {
-                        print(github_graph(&game));
-                        // Gradually layering games isn't thought through yet
-                        //if consecutive_days(game) < 7 {
-                        //    break;
-                        //}
-                    }
-                }
+        match current_meta_game() {
+            Some(game) => {print(github_graph(&game))},
+            None => {}
+        };
         print(format!("Gerard Manley Hopkins (1844–89).  Poems.  1918.
  
 13. Pied Beauty
@@ -391,6 +361,11 @@ He fathers-forth whose beauty is past change:	        10
 }
 }
 
+
+
+// View
+
+
 fn view_from_items(items: Vec<calendar3::Event>) -> View {
     let mut view = "".to_string();
 
@@ -448,7 +423,7 @@ fn github_graph(g: &Game) -> View {
      * I'll have to change this come daylights savings time
      * */
     let now = Local::now();
-    let california =  FixedOffset::west(7 * 3600); //TODO Fix for daylight savings
+    let california =  FixedOffset::west(7 * 3600);  // Fix for daylight savings
     if now < g.end && now > g.start {
         let dates = &g
             .events
@@ -489,6 +464,57 @@ fn github_graph(g: &Game) -> View {
     }
 }
 
+fn current_meta_game() -> Option<Game> {
+    let model1 = view().to_owned();
+
+    print(format!("{:?}", model1));
+    let model2 = model1.clone();
+    let metas = model1.metas.unwrap_or(vec![]);
+    let name = match metas.first() {
+        Some(meta) => meta.name.clone(),
+        None => "".to_owned()
+    };
+
+    let games : Vec<Game> = model2.games.into_iter().filter(|g| match g.part_of {
+        Some(ref game_name) => game_name.clone() == name,
+        None => false
+       }).collect();
+
+    print(format!("{:?}", games));
+    let all_events: Vec<Time> = games.iter().flat_map(|x| x.events.clone()).collect(); //Pretty sloppy decisions whether to clone and who...
+    print(format!("{:?}", all_events));
+
+    let california =  FixedOffset::west(7 * 3600);  // Fix for daylight savings
+    let valid_events: Vec<Time> = all_events.into_iter().filter(|potential_meta_event| {
+        games.iter().all(|game| game.events.iter().find(|game_event| {
+            let cali_game_event = game_event.clone().with_timezone(&california).date();
+            let cali_meta_event = potential_meta_event.clone().with_timezone(&california).date();
+            cali_game_event == cali_meta_event
+        }).is_some())
+    }).collect();
+
+    print(format!("{:?}", valid_events));
+
+    let earliest =  games.iter().min_by(|x, y| x.start.cmp(&y.start));
+    let latest =  games.iter().max_by(|x, y| x.end.cmp(&y.end));
+    match (earliest, latest) {
+        (Some(early), Some(late)) => Some(Game {
+            name: name,
+            start: early.start,
+            end: late.end,
+            events: valid_events,
+            part_of: None,
+            skipping: None, 
+        }),
+        _ => None
+    }
+}
+
+
+
+// Data Structures
+
+
 type View = std::string::String;
 type Time = chrono::DateTime<Local>;
 
@@ -498,15 +524,13 @@ struct Game {
     start: Time,
     end: Time,
     events: Vec<Time>,
+    part_of: Option<String>, // Proposed replacement for meta game
+    skipping: Option<Vec<Weekday>>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Meta {
     name: String,
-    start: Time,
-    end: Time,
-    all: Vec<String>,
-    none: Vec<String>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -547,6 +571,11 @@ impl AuthenticatorDelegate for PrinterAuthenticatorDelegate {
                 ))
     }
 }
+
+
+
+// Graveyard
+
 
 fn _consecutive_days(g: &Game) -> i32 {
     let dates = g
