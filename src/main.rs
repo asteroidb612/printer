@@ -33,7 +33,6 @@ use oauth2::{
 };
 use rouille::{Response, Server, log};
 use serial::prelude::*;
-//use std::default::Default;
 use std::env::var;
 use std::fs::File;
 use std::io::prelude::*;
@@ -465,7 +464,6 @@ fn github_graph(g: &Game) -> View {
 fn current_meta_game() -> Option<Game> {
     let model1 = view().to_owned();
 
-    print(format!("{:?}", model1));
     let model2 = model1.clone();
     let metas = model1.metas.unwrap_or(vec![]);
     let name = match metas.first() {
@@ -478,9 +476,7 @@ fn current_meta_game() -> Option<Game> {
         None => false
        }).collect();
 
-    print(format!("{:?}", games));
     let all_events: Vec<Time> = games.iter().flat_map(|x| x.events.clone()).collect(); //Pretty sloppy decisions whether to clone and who...
-    print(format!("{:?}", all_events));
 
     let california =  FixedOffset::west(7 * 3600);  // Fix for daylight savings
     let valid_events: Vec<Time> = all_events.into_iter().filter(|potential_meta_event| {
@@ -497,8 +493,6 @@ fn current_meta_game() -> Option<Game> {
         day_off || all_games_won
         })
     }).collect();
-
-    print(format!("{:?}", valid_events));
 
     let earliest =  games.iter().min_by(|x, y| x.start.cmp(&y.start));
     let latest =  games.iter().max_by(|x, y| x.end.cmp(&y.end));
