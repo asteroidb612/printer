@@ -33,7 +33,7 @@ use oauth2::{
 };
 use rouille::{Response, Server, log};
 use serial::prelude::*;
-use std::default::Default;
+//use std::default::Default;
 use std::env::var;
 use std::fs::File;
 use std::io::prelude::*;
@@ -122,8 +122,6 @@ fn setup() {
 fn update(msg: Msg) {
     let mut model = MODEL.lock().unwrap();
     let now = Local::now();
-
-    //Update
     match msg {
         Msg::GameOccurence(occurrence_name, time) =>{  
             let games = &mut model.games;
@@ -486,11 +484,18 @@ fn current_meta_game() -> Option<Game> {
 
     let california =  FixedOffset::west(7 * 3600);  // Fix for daylight savings
     let valid_events: Vec<Time> = all_events.into_iter().filter(|potential_meta_event| {
-        games.iter().all(|game| game.events.iter().find(|game_event| {
-            let cali_game_event = game_event.clone().with_timezone(&california).date();
-            let cali_meta_event = potential_meta_event.clone().with_timezone(&california).date();
-            cali_game_event == cali_meta_event
-        }).is_some())
+        games.iter().all(|game| {
+            let day_off = game.clone().skipping.unwrap_or(vec![]).into_iter()
+                .find(|skip| potential_meta_event.clone().with_timezone(&california).date().weekday() == skip.clone())
+                .is_some();
+            let all_games_won = game.events.iter()
+                .find(|game_event| {
+                    let cali_game_event = game_event.clone().with_timezone(&california).date();
+                    let cali_meta_event = potential_meta_event.clone().with_timezone(&california).date();
+                    cali_game_event == cali_meta_event})
+                .is_some();
+        day_off || all_games_won
+        })
     }).collect();
 
     print(format!("{:?}", valid_events));
