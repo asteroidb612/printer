@@ -1,5 +1,6 @@
 extern crate chrono;
 extern crate google_calendar3 as calendar3;
+extern crate google_gmail1 as gmail1;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate itertools;
@@ -20,6 +21,7 @@ extern crate cfg_if;
 extern crate lazy_static; // Are singletons evil? elmy? https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
 
 use calendar3::CalendarHub;
+use gmail1::{Gmail, Label};
 use chrono::offset::*;
 use chrono::prelude::Local;
 use chrono::Datelike;
@@ -29,7 +31,7 @@ use itertools::Itertools;
 use job_scheduler::{Job, JobScheduler};
 use oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, AuthenticatorDelegate,
-    DiskTokenStorage, PollInformation,
+    DiskTokenStorage, PollInformation, MemoryStorage
 };
 use rouille::{Response, Server, log};
 use serial::prelude::*;
@@ -163,7 +165,7 @@ fn print(s: String) {
     let mut write_to = match File::create(Path::new(PRINTER_PATH)) {
         //I have a lot of good case studies in here for moving/borrowing... this is one...
         Err(why) => panic!("couldn't create file in write-only mode: {}", why),
-        Ok(mut file) => file,
+        Ok(file) => file,
     };
 
     let formatted = format!("\n{}\n\n\n", s); //3 at end so receipt rips nicely
@@ -183,8 +185,9 @@ fn main() {
 
     let token_storage =
         DiskTokenStorage::new(&TOKEN_STORAGE.to_string()).expect("Couldn't use disk token storage");
+    let google_secret = &secret(); 
     let auth = Authenticator::new(
-        &secret(),
+        &google_secret,
         PrinterAuthenticatorDelegate,
         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
@@ -198,6 +201,34 @@ fn main() {
                 )),
                 auth,
                 );
+    let token_storage_for_gmail =
+        DiskTokenStorage::new(&"gmail_token".to_owned()).expect("Couldn't use disk token storage");
+
+    let mut auth_for_gmail =  Authenticator::new(
+        &google_secret,
+        PrinterAuthenticatorDelegate,
+        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+                hyper_rustls::TlsClient::new(),
+                )),
+                <MemoryStorage as Default>::default(),
+                None,
+                );
+
+    let gmail_hub = Gmail::new(hyper::Client::with_connector(hyper::net::HttpsConnector::new(hyper_rustls::TlsClient::new())), auth_for_gmail);
+    let check_email = move || {
+        let command =  gmail_hub.users().labels_get("dlazzeri1@gmail.com", "INBOX").add_scope("https://www.googleapis.com/auth/gmail.readonly");
+        match command.doit() {
+            Ok((_res, label)) => {
+                print(format!("{:?} threads in inbox", label.threads_total));
+            },
+            x => {
+                print(format!(
+                        "Unable to connect to Google when looking for gmail dlazzeri1@gmail.com {:?}", x
+                        )); //Sometimes this has meant that the printer was off for a while and had to renegotiate keys
+            }
+        }
+
+    };
 
     let mut cron = JobScheduler::new();
 
@@ -335,6 +366,7 @@ He fathers-forth whose beauty is past change:	        10
     });
 
     print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
+    check_email();
     try_print_moxie();
     cron.add(Job::new(
             "0 0 12 * * *".parse().unwrap(), //Package users Greenwhich mean time. w/ dst should be 6:00?
