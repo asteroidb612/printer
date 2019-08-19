@@ -208,7 +208,7 @@ fn main() {
 
     let print_next_five_days = move || {
         println!("print_next_five_days");
-        let now = Local::now();
+        let now = Utc.ymd(2019, 5, 17).and_hms(12, 0, 9);
         let next_week = now
             .clone()
             .checked_add_signed(OlderDuration::weeks(1))
@@ -247,26 +247,28 @@ fn main() {
         }
         print(format!("{}", view_from_items(all_events)));
         match current_meta_game() {
-            Some(game) => {print(github_graph(&game))},
+            Some(game) => {
+                print(github_graph(&game))
+            },
             None => {}
         };
-        print(format!("Gerard Manley Hopkins (1844–89).  Poems.  1918.
- 
-13. Pied Beauty
- 
- 
-GLORY be to God for dappled things—	
-  For skies of couple-colour as a brinded cow;	
-    For rose-moles all in stipple upon trout that swim;	
-Fresh-firecoal chestnut-falls; finches' wings;	
-  Landscape plotted and pieced—fold, fallow, and plough;	        5
-    And áll trádes, their gear and tackle and trim.	
- 
-All things counter, original, spare, strange;	
-  Whatever is fickle, freckled (who knows how?)	
-    With swift, slow; sweet, sour; adazzle, dim;	
-He fathers-forth whose beauty is past change:	        10
-                  Praise him."));
+//        print(format!("Gerard Manley Hopkins (1844–89).  Poems.  1918.
+// 
+//13. Pied Beauty
+// 
+// 
+//GLORY be to God for dappled things—	
+//  For skies of couple-colour as a brinded cow;	
+//    For rose-moles all in stipple upon trout that swim;	
+//Fresh-firecoal chestnut-falls; finches' wings;	
+//  Landscape plotted and pieced—fold, fallow, and plough;	        5
+//    And áll trádes, their gear and tackle and trim.	
+// 
+//All things counter, original, spare, strange;	
+//  Whatever is fickle, freckled (who knows how?)	
+//    With swift, slow; sweet, sour; adazzle, dim;	
+//He fathers-forth whose beauty is past change:	        10
+//                  Praise him."));
     };
     let _check_ynab_api =
         move || {
@@ -419,9 +421,10 @@ fn github_graph(g: &Game) -> View {
      * If we want accurate printing through, we want the days to line up with CA, 
      * I'll have to change this come daylights savings time
      * */
-    let now = Local::now();
+    //let now = Local::now();
     let california =  FixedOffset::west(7 * 3600);  // Fix for daylight savings
-    if now < g.end && now > g.start {
+    let now = Utc.ymd(2019, 5, 17).and_hms(12, 0, 9).with_timezone(&california);
+    if now < g.end.with_timezone(&california) && now > g.start.with_timezone(&california) {
         let dates = &g
             .events
             .iter()
