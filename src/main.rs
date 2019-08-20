@@ -178,224 +178,184 @@ fn print(s: String) {
 
 
 fn main() {
-   setup();
-   print("It's working... It's working!
+    setup();
+    print(String::from("It's working... It's working!"));
 
+    let token_storage =
+        DiskTokenStorage::new(&TOKEN_STORAGE.to_string()).expect("Couldn't use disk token storage");
+    let auth = Authenticator::new(
+        &secret(),
+        PrinterAuthenticatorDelegate,
+        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+                hyper_rustls::TlsClient::new(),
+                )),
+                token_storage,
+                None,
+                );
+    let hub = CalendarHub::new(
+        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+                hyper_rustls::TlsClient::new(),
+                )),
+                auth,
+                );
 
-print_next_five_days
+    let mut cron = JobScheduler::new();
 
-Friday10:
-  22:00 love_stories
-Friday17:
-  00:00 Forrest’s Birthday
-  12:30 Team Lunch Out
-Saturday18:
-  00:00 Monet w/ Kate
-Sunday19:
-  12:00 Maddie MOMA
-Tuesday21:
-  19:00 Choir
-Wednesday22:
-  13:00 Product roadmap check-in
-  13:30 Resolve Discovery Orgs Reminder
-  15:00 Team Meeting
-Thursday23:
-  00:00 WFH Day
-  14:00 Crash course in Heap/Front End client
+    //Set up a channels for communication between threads
+    let (send_msg, recieve_msg) = mpsc::channel();
+    let for_web_proc = Arc::new(Mutex::new(send_msg));
+    let for_cron = for_web_proc.clone();
 
+    let print_next_five_days = move || {
+        println!("print_next_five_days");
+        let now = Local::now();
+        let next_week = now
+            .clone()
+            .checked_add_signed(OlderDuration::weeks(1))
+            .expect("Time Overflow");
 
+        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io"];
+        let mut all_events = vec![];
 
+        for calendar in calendars.iter() {
+            let result = hub
+                .events()
+                .list(&calendar)
+                .single_events(true)
+                .time_min(&now.to_rfc3339())
+                .time_max(&next_week.to_rfc3339())
+                .doit();
 
+            match result {
+                Ok((_res, events)) => {
+                    match events.items {
+                        Some(mut e) => {
+                            all_events.append(&mut e);
+                        }
+                        None => {
+                            print(format!("No events on calendar {}", calendar));
+                        }
+                    };
+                }
+                x => {
+                    print(format!(
+                            "Unable to connect to Google when looking for calendar {}: {:?}",
+                            calendar, x
+                            )); //Sometimes this has meant that the printer was off for a while and had to renegotiate keys
+                }
+            };
+        }
+        print(format!("{}", view_from_items(all_events)));
+        match current_meta_game() {
+            Some(game) => {print(github_graph(&game))},
+            None => {}
+        };
+        print(format!("Gerard Manley Hopkins (1844–89).  Poems.  1918.
+ 
+13. Pied Beauty
+ 
+ 
+GLORY be to God for dappled things—	
+  For skies of couple-colour as a brinded cow;	
+    For rose-moles all in stipple upon trout that swim;	
+Fresh-firecoal chestnut-falls; finches' wings;	
+  Landscape plotted and pieced—fold, fallow, and plough;	        5
+    And áll trádes, their gear and tackle and trim.	
+ 
+All things counter, original, spare, strange;	
+  Whatever is fickle, freckled (who knows how?)	
+    With swift, slow; sweet, sour; adazzle, dim;	
+He fathers-forth whose beauty is past change:	        10
+                  Praise him."));
+    };
+    let _check_ynab_api =
+        move || {
+            let client = reqwest::Client::new();
+            let url = "";
+            let bear = ""; //move to file
+            let mut res = client
+                .get(url)
+                .bearer_auth(bear)
+                .send()
+                .expect("Couldn't send request to YNAB");
 
-Game /Game_Two
+            let response: YNABResponse = res.json().expect("Couldn't parse respone from YNAB");
+            if response.data.transactions.into_iter().all(|transaction| {
+                match transaction.flag_color {
+                    None => transaction.approved,
+                    _ => true,
+                }
+            }) {
+                update(Msg::GameOccurence("ynab".to_owned(), Local::now()));
+            }
+        };
 
-_X_____
-_______
-_____X_
-_______
-_____Oo
+    //Could be nice to invert this - only spawn the thread if we have the file.
+    std::thread::spawn(|| {
+        let server = Server::new(PORT, move |request| {
+            log(request, io::stdout(), || {
 
+                router!(request,
+                        (GET) ["/"] => {
+                            let file = File::open("site/index.html").unwrap();
+                            Response::from_file("text/html; charset=utf8", file) },
+                            (GET) ["/games"] => {
+                                Response::text(serialized_view())
+                            },
+                            (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
+                                let start = Local::now();
+                                let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
+                                update(Msg::GameCreate(name, start, end));
+                                Response::text(serialized_view())
+                            },
+                            (POST) ["/overwrite_game_file"] => {
+                                let new_model: Model  = try_or_400!(rouille::input::json_input(request));
+                                update(Msg::Replace(new_model));
+                                Response::text(serialized_view())
+                            },
+                            (GET) ["/read_game_file"] => {
+                                let file = File::open(STORAGE).unwrap();
+                                Response::from_file("text/html; charset=utf8", file)
+                            },
+                            (GET) ["/print"] => {
+                                let tx1 = for_web_proc.lock().unwrap();
+                                tx1.send(0).unwrap();
+                                Response::text("Okay".to_owned()) 
+                            },
+                            (GET) ["/{name}", name: String] => {
+                                update(Msg::GameOccurence(name, Local::now()));
+                                Response::text(serialized_view())
+                            },
+                            _ => Response::empty_404()
+                                )
+            } )
+        }).expect("Unable to start web server");
+        server.run();
+        print("The server stopped running!".to_owned());
+    });
 
+    print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
+    try_print_moxie();
+    cron.add(Job::new(
+            "0 0 12 * * *".parse().unwrap(), //Package users Greenwhich mean time. w/ dst should be 6:00?
+            move || {
+                let tx1 = for_cron.lock().unwrap();
+                tx1.send(0).unwrap();
+            }
+            ));
+    cron.add(Job::new(
+            "0 0 2 * * *".parse().unwrap(),
+            try_print_moxie
+            ));
 
-
-".to_owned());
-// print(String::from("It's working... It's working!"));
-//
-//    let token_storage =
-//        DiskTokenStorage::new(&TOKEN_STORAGE.to_string()).expect("Couldn't use disk token storage");
-//    let auth = Authenticator::new(
-//        &secret(),
-//        PrinterAuthenticatorDelegate,
-//        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-//                hyper_rustls::TlsClient::new(),
-//                )),
-//                token_storage,
-//                None,
-//                );
-//    let hub = CalendarHub::new(
-//        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-//                hyper_rustls::TlsClient::new(),
-//                )),
-//                auth,
-//                );
-//
-//    let mut cron = JobScheduler::new();
-//
-//    //Set up a channels for communication between threads
-//    let (send_msg, recieve_msg) = mpsc::channel();
-//    let for_web_proc = Arc::new(Mutex::new(send_msg));
-//    let for_cron = for_web_proc.clone();
-//
-//    let print_next_five_days = move || {
-//        println!("print_next_five_days");
-//        let now = Local::now();
-//        let next_week = now
-//            .clone()
-//            .checked_add_signed(OlderDuration::weeks(1))
-//            .expect("Time Overflow");
-//
-//        let calendars = ["dlazzeri1@gmail.com", "drew@interviewing.io"];
-//        let mut all_events = vec![];
-//
-//        for calendar in calendars.iter() {
-//            let result = hub
-//                .events()
-//                .list(&calendar)
-//                .single_events(true)
-//                .time_min(&now.to_rfc3339())
-//                .time_max(&next_week.to_rfc3339())
-//                .doit();
-//
-//            match result {
-//                Ok((_res, events)) => {
-//                    match events.items {
-//                        Some(mut e) => {
-//                            all_events.append(&mut e);
-//                        }
-//                        None => {
-//                            print(format!("No events on calendar {}", calendar));
-//                        }
-//                    };
-//                }
-//                x => {
-//                    print(format!(
-//                            "Unable to connect to Google when looking for calendar {}: {:?}",
-//                            calendar, x
-//                            )); //Sometimes this has meant that the printer was off for a while and had to renegotiate keys
-//                }
-//            };
-//        }
-//        print(format!("{}", view_from_items(all_events)));
-//        match current_meta_game() {
-//            Some(game) => {print(github_graph(&game))},
-//            None => {}
-//        };
-//        print(format!("Gerard Manley Hopkins (1844–89).  Poems.  1918.
-// 
-//13. Pied Beauty
-// 
-// 
-//GLORY be to God for dappled things—	
-//  For skies of couple-colour as a brinded cow;	
-//    For rose-moles all in stipple upon trout that swim;	
-//Fresh-firecoal chestnut-falls; finches' wings;	
-//  Landscape plotted and pieced—fold, fallow, and plough;	        5
-//    And áll trádes, their gear and tackle and trim.	
-// 
-//All things counter, original, spare, strange;	
-//  Whatever is fickle, freckled (who knows how?)	
-//    With swift, slow; sweet, sour; adazzle, dim;	
-//He fathers-forth whose beauty is past change:	        10
-//                  Praise him."));
-//    };
-//    let _check_ynab_api =
-//        move || {
-//            let client = reqwest::Client::new();
-//            let url = "";
-//            let bear = ""; //move to file
-//            let mut res = client
-//                .get(url)
-//                .bearer_auth(bear)
-//                .send()
-//                .expect("Couldn't send request to YNAB");
-//
-//            let response: YNABResponse = res.json().expect("Couldn't parse respone from YNAB");
-//            if response.data.transactions.into_iter().all(|transaction| {
-//                match transaction.flag_color {
-//                    None => transaction.approved,
-//                    _ => true,
-//                }
-//            }) {
-//                update(Msg::GameOccurence("ynab".to_owned(), Local::now()));
-//            }
-//        };
-//
-//    //Could be nice to invert this - only spawn the thread if we have the file.
-//    std::thread::spawn(|| {
-//        let server = Server::new(PORT, move |request| {
-//            log(request, io::stdout(), || {
-//
-//                router!(request,
-//                        (GET) ["/"] => {
-//                            let file = File::open("site/index.html").unwrap();
-//                            Response::from_file("text/html; charset=utf8", file) },
-//                            (GET) ["/games"] => {
-//                                Response::text(serialized_view())
-//                            },
-//                            (POST) ["/games/{name}/{weeks}", name:String, weeks:i64] => {
-//                                let start = Local::now();
-//                                let end = (&start).checked_add_signed(OlderDuration::weeks(weeks)).expect("TimeOverflow");
-//                                update(Msg::GameCreate(name, start, end));
-//                                Response::text(serialized_view())
-//                            },
-//                            (POST) ["/overwrite_game_file"] => {
-//                                let new_model: Model  = try_or_400!(rouille::input::json_input(request));
-//                                update(Msg::Replace(new_model));
-//                                Response::text(serialized_view())
-//                            },
-//                            (GET) ["/read_game_file"] => {
-//                                let file = File::open(STORAGE).unwrap();
-//                                Response::from_file("text/html; charset=utf8", file)
-//                            },
-//                            (GET) ["/print"] => {
-//                                let tx1 = for_web_proc.lock().unwrap();
-//                                tx1.send(0).unwrap();
-//                                Response::text("Okay".to_owned()) 
-//                            },
-//                            (GET) ["/{name}", name: String] => {
-//                                update(Msg::GameOccurence(name, Local::now()));
-//                                Response::text(serialized_view())
-//                            },
-//                            _ => Response::empty_404()
-//                                )
-//            } )
-//        }).expect("Unable to start web server");
-//        server.run();
-//        print("The server stopped running!".to_owned());
-//    });
-//
-//    print_next_five_days(); //How is this ownership fine? But not in the cron closure?! I had to convert cron to channels, why not this?
-//    try_print_moxie();
-//    cron.add(Job::new(
-//            "0 0 12 * * *".parse().unwrap(), //Package users Greenwhich mean time. w/ dst should be 6:00?
-//            move || {
-//                let tx1 = for_cron.lock().unwrap();
-//                tx1.send(0).unwrap();
-//            }
-//            ));
-//    cron.add(Job::new(
-//            "0 0 2 * * *".parse().unwrap(),
-//            try_print_moxie
-//            ));
-//
-//    //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
-//    loop {
-//        cron.tick();
-//        if let Ok(_) = recieve_msg.try_recv() {
-//            print_next_five_days();
-//            }
-//        std::thread::sleep(Duration::from_millis(500));
-//}
+    //    cron.add(Job::new("0 0 1/3 0 0 0".parse().unwrap(), check_ynab_api)); //Hours divisible by 3
+    loop {
+        cron.tick();
+        if let Ok(_) = recieve_msg.try_recv() {
+            print_next_five_days();
+            }
+        std::thread::sleep(Duration::from_millis(500));
+}
 }
 
 
